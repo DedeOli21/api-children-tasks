@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "postinstall": "npm run build",
+    "start": "node dist/main.js"
+  }
+}
+
