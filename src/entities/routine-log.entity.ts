@@ -28,7 +28,7 @@ export class RoutineLog {
   @Column({ default: false })
   completed: boolean;
 
-  @Column({ name: 'completed_at', type: 'datetime', nullable: true })
+  @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
   completedAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
