@@ -1,26 +1,49 @@
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User, UserRole } from '../entities/user.entity';
-import { Task } from '../entities/task.entity';
-import { DailyLog } from '../entities/daily-log.entity';
-import { Penalty } from '../entities/penalty.entity';
-import { Reward } from '../entities/reward.entity';
-import { HistoryEntry } from '../entities/history-entry.entity';
-import { Routine } from '../entities/routine.entity';
+import {
+  User,
+  UserRole,
+  Task,
+  DailyLog,
+  Penalty,
+  Reward,
+  HistoryEntry,
+  Routine,
+  RoutineLog,
+  MysteryPrize,
+  MysteryPrizeRarity,
+  TeacherStudent,
+  BehaviorReport,
+} from '../entities';
+import { generateInviteCode } from '../children/invite-code.util';
+
+const entities = [
+  User,
+  Task,
+  DailyLog,
+  Penalty,
+  Reward,
+  HistoryEntry,
+  Routine,
+  RoutineLog,
+  MysteryPrize,
+  TeacherStudent,
+  BehaviorReport,
+];
 
 const dataSource = new DataSource(
   process.env.DATABASE_TYPE === 'postgres'
     ? {
         type: 'postgres',
         url: process.env.DATABASE_URL,
-        entities: [User, Task, DailyLog, Penalty, Reward, HistoryEntry, Routine],
+        entities,
         synchronize: true,
         ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
       }
     : {
         type: 'better-sqlite3',
         database: process.env.DATABASE_PATH || 'database.sqlite',
-        entities: [User, Task, DailyLog, Penalty, Reward, HistoryEntry, Routine],
+        entities,
         synchronize: true,
       },
 );
@@ -30,33 +53,84 @@ async function seed() {
 
   console.log('🌱 Iniciando seed do banco de dados...\n');
 
-  // Seed de Usuário Admin
   const userRepository = dataSource.getRepository(User);
-  const existingAdmin = await userRepository.findOne({
-    where: { email: 'admin@admin.com' },
-  });
 
-  if (!existingAdmin) {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    const admin = userRepository.create({
-      name: 'Administrador',
-      email: 'admin@admin.com',
-      password: hashedPassword,
-      role: UserRole.ADMIN,
-      currentStars: 0,
-    });
-    await userRepository.save(admin);
-    console.log('✅ Usuário admin criado (admin@admin.com / admin123)');
+  // Responsável demo
+  let parent = await userRepository.findOne({
+    where: { email: 'pai@demo.com' },
+  });
+  if (!parent) {
+    parent = await userRepository.save(
+      userRepository.create({
+        name: 'Responsável Demo',
+        email: 'pai@demo.com',
+        password: await bcrypt.hash('123456', 10),
+        role: UserRole.PARENT,
+      }),
+    );
+    console.log('✅ Responsável criado (pai@demo.com / 123456)');
   } else {
-    console.log('⏭️ Usuário admin já existe');
+    console.log('⏭️ Responsável já existe');
   }
+
+  // Criança demo
+  let child = await userRepository.findOne({ where: { email: 'gabriel' } });
+  if (!child) {
+    child = await userRepository.save(
+      userRepository.create({
+        name: 'Gabriel',
+        email: 'gabriel',
+        password: await bcrypt.hash('1234', 10),
+        role: UserRole.CHILD,
+        parentId: parent.id,
+        inviteCode: generateInviteCode(),
+      }),
+    );
+    console.log(`✅ Criança criada (usuário: gabriel / senha: 1234, código: ${child.inviteCode})`);
+  } else {
+    console.log('⏭️ Criança já existe');
+  }
+
+  // Professor demo (vinculado ao Gabriel)
+  let teacher = await userRepository.findOne({
+    where: { email: 'professora@demo.com' },
+  });
+  if (!teacher) {
+    teacher = await userRepository.save(
+      userRepository.create({
+        name: 'Professora Demo',
+        email: 'professora@demo.com',
+        password: await bcrypt.hash('123456', 10),
+        role: UserRole.TEACHER,
+      }),
+    );
+    console.log('✅ Professor(a) criado (professora@demo.com / 123456)');
+  } else {
+    console.log('⏭️ Professor(a) já existe');
+  }
+
+  const teacherStudentRepository = dataSource.getRepository(TeacherStudent);
+  const existingLink = await teacherStudentRepository.findOne({
+    where: { teacherId: teacher.id, childId: child.id },
+  });
+  if (!existingLink) {
+    await teacherStudentRepository.save(
+      teacherStudentRepository.create({
+        teacherId: teacher.id,
+        childId: child.id,
+      }),
+    );
+    console.log('✅ Professora vinculada ao Gabriel');
+  }
+
+  const familyId = parent.id;
 
   // Seed de Tarefas
   const taskRepository = dataSource.getRepository(Task);
   const existingTasks = await taskRepository.count();
-  
+
   let createdTasks: Task[] = [];
-  
+
   if (existingTasks === 0) {
     const tasks = [
       { title: 'Escovar os dentes de manhã', iconEmoji: '🪥' },
@@ -72,7 +146,9 @@ async function seed() {
     ];
 
     for (const task of tasks) {
-      const createdTask = await taskRepository.save(taskRepository.create(task));
+      const createdTask = await taskRepository.save(
+        taskRepository.create({ ...task, familyId }),
+      );
       createdTasks.push(createdTask);
     }
     console.log(`✅ ${tasks.length} tarefas criadas`);
@@ -84,7 +160,7 @@ async function seed() {
   // Seed de Penalidades
   const penaltyRepository = dataSource.getRepository(Penalty);
   const existingPenalties = await penaltyRepository.count();
-  
+
   if (existingPenalties === 0) {
     const penalties = [
       { title: 'Briga com irmão/irmã', emoji: '😤', amount: 2 },
@@ -96,7 +172,7 @@ async function seed() {
     ];
 
     for (const penalty of penalties) {
-      await penaltyRepository.save(penaltyRepository.create(penalty));
+      await penaltyRepository.save(penaltyRepository.create({ ...penalty, familyId }));
     }
     console.log(`✅ ${penalties.length} penalidades criadas`);
   } else {
@@ -106,7 +182,7 @@ async function seed() {
   // Seed de Recompensas
   const rewardRepository = dataSource.getRepository(Reward);
   const existingRewards = await rewardRepository.count();
-  
+
   if (existingRewards === 0) {
     const rewards = [
       { title: '30 min de videogame', emoji: '🎮', cost: 10 },
@@ -120,21 +196,42 @@ async function seed() {
     ];
 
     for (const reward of rewards) {
-      await rewardRepository.save(rewardRepository.create(reward));
+      await rewardRepository.save(rewardRepository.create({ ...reward, familyId }));
     }
     console.log(`✅ ${rewards.length} recompensas criadas`);
   } else {
     console.log(`⏭️ Recompensas já existem (${existingRewards})`);
   }
 
+  // Seed de Prêmios da Caixa Surpresa
+  const prizeRepository = dataSource.getRepository(MysteryPrize);
+  const existingPrizes = await prizeRepository.count();
+
+  if (existingPrizes === 0) {
+    const prizes = [
+      { name: 'Bala', emoji: '🍬', rarity: MysteryPrizeRarity.COMMON, description: 'Uma bala gostosa!', weight: 50 },
+      { name: 'Adesivo', emoji: '🏷️', rarity: MysteryPrizeRarity.COMMON, description: 'Um adesivo legal!', weight: 50 },
+      { name: 'Escolher sobremesa', emoji: '🍨', rarity: MysteryPrizeRarity.RARE, description: 'Você escolhe a sobremesa!', weight: 25 },
+      { name: '10 min extra de jogo', emoji: '🎮', rarity: MysteryPrizeRarity.RARE, description: 'Mais tempo de diversão!', weight: 25 },
+      { name: 'Filme especial', emoji: '🎬', rarity: MysteryPrizeRarity.EPIC, description: 'Assistir filme fora de hora!', weight: 10 },
+      { name: 'Super prêmio', emoji: '🏆', rarity: MysteryPrizeRarity.LEGENDARY, description: 'O prêmio dos seus sonhos!', weight: 3 },
+    ];
+
+    for (const prize of prizes) {
+      await prizeRepository.save(prizeRepository.create({ ...prize, familyId }));
+    }
+    console.log(`✅ ${prizes.length} prêmios da caixa surpresa criados`);
+  } else {
+    console.log(`⏭️ Prêmios já existem (${existingPrizes})`);
+  }
+
   // Seed de Rotinas
   const routineRepository = dataSource.getRepository(Routine);
   const existingRoutines = await routineRepository.count();
-  
+
   if (existingRoutines === 0 && createdTasks.length > 0) {
-    // Encontrar tarefas por título para associar às rotinas
-    const findTask = (title: string) => createdTasks.find(t => t.title.includes(title));
-    
+    const findTask = (title: string) => createdTasks.find((t) => t.title.includes(title));
+
     const routines = [
       {
         name: 'Rotina da Manhã',
@@ -142,10 +239,7 @@ async function seed() {
         emoji: '🌅',
         timeOfDay: 'morning',
         sortOrder: 1,
-        tasks: [
-          findTask('dentes de manhã'),
-          findTask('Arrumar a cama'),
-        ].filter(Boolean) as Task[],
+        tasks: [findTask('dentes de manhã'), findTask('Arrumar a cama')].filter(Boolean) as Task[],
       },
       {
         name: 'Rotina da Tarde',
@@ -153,11 +247,7 @@ async function seed() {
         emoji: '☀️',
         timeOfDay: 'afternoon',
         sortOrder: 2,
-        tasks: [
-          findTask('dever de casa'),
-          findTask('Beber água'),
-          findTask('Comer frutas'),
-        ].filter(Boolean) as Task[],
+        tasks: [findTask('dever de casa'), findTask('Beber água'), findTask('Comer frutas')].filter(Boolean) as Task[],
       },
       {
         name: 'Rotina da Noite',
@@ -182,6 +272,7 @@ async function seed() {
         timeOfDay: routine.timeOfDay,
         sortOrder: routine.sortOrder,
         tasks: routine.tasks,
+        familyId,
       });
       await routineRepository.save(newRoutine);
     }
@@ -191,7 +282,11 @@ async function seed() {
   }
 
   console.log('\n✨ Seed concluído!\n');
-  
+  console.log('Contas demo:');
+  console.log('  Responsável: pai@demo.com / 123456');
+  console.log('  Criança:     gabriel / 1234');
+  console.log('  Professora:  professora@demo.com / 123456\n');
+
   await dataSource.destroy();
 }
 

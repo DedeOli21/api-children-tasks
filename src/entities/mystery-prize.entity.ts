@@ -18,6 +18,10 @@ export class MysteryPrize {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Família dona do prêmio (id do responsável)
+  @Column({ name: 'family_id', type: 'text', nullable: true })
+  familyId: string | null;
+
   @Column()
   name: string;
 

@@ -9,4 +9,6 @@ export * from './routine.entity';
 export * from './routine-log.entity';
 export * from './mystery-prize.entity';
 export { MysteryPrizeRarity } from './mystery-prize.entity';
+export * from './teacher-student.entity';
+export * from './behavior-report.entity';
 

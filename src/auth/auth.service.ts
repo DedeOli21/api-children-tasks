@@ -7,7 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { User } from '../entities';
+import { User, UserRole } from '../entities';
 import { LoginDto, RegisterDto } from './dto';
 
 @Injectable()
@@ -31,6 +31,7 @@ export class AuthService {
 
     const user = this.userRepository.create({
       ...registerDto,
+      role: registerDto.role ?? UserRole.PARENT,
       password: hashedPassword,
     });
 
@@ -82,7 +83,7 @@ export class AuthService {
   }
 
   private generateToken(user: User): string {
-    const payload = { sub: user.id, email: user.email };
+    const payload = { sub: user.id, email: user.email, role: user.role };
     return this.jwtService.sign(payload);
   }
 }

@@ -18,9 +18,9 @@ export class MysteryBoxService {
 
   private readonly MYSTERY_BOX_COST = 5; // Custo fixo da caixa
 
-  async getConfig() {
+  async getConfig(familyId: string) {
     const prizes = await this.mysteryPrizeRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
       order: { createdAt: 'ASC' },
     });
 
@@ -37,19 +37,25 @@ export class MysteryBoxService {
     };
   }
 
-  async findAll() {
+  async findAll(familyId: string) {
     return this.mysteryPrizeRepository.find({
+      where: { familyId },
       order: { createdAt: 'ASC' },
     });
   }
 
-  async create(createDto: CreateMysteryPrizeDto) {
-    const prize = this.mysteryPrizeRepository.create(createDto);
+  async create(createDto: CreateMysteryPrizeDto, familyId: string) {
+    const prize = this.mysteryPrizeRepository.create({
+      ...createDto,
+      familyId,
+    });
     return this.mysteryPrizeRepository.save(prize);
   }
 
-  async update(id: string, updateDto: UpdateMysteryPrizeDto) {
-    const prize = await this.mysteryPrizeRepository.findOne({ where: { id } });
+  async update(id: string, updateDto: UpdateMysteryPrizeDto, familyId: string) {
+    const prize = await this.mysteryPrizeRepository.findOne({
+      where: { id, familyId },
+    });
 
     if (!prize) {
       throw new NotFoundException('Prêmio não encontrado');
@@ -59,8 +65,10 @@ export class MysteryBoxService {
     return this.mysteryPrizeRepository.save(prize);
   }
 
-  async delete(id: string) {
-    const prize = await this.mysteryPrizeRepository.findOne({ where: { id } });
+  async delete(id: string, familyId: string) {
+    const prize = await this.mysteryPrizeRepository.findOne({
+      where: { id, familyId },
+    });
 
     if (!prize) {
       throw new NotFoundException('Prêmio não encontrado');
@@ -70,7 +78,7 @@ export class MysteryBoxService {
     return { message: 'Prêmio removido com sucesso' };
   }
 
-  async openBox(userId: string) {
+  async openBox(userId: string, familyId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
@@ -84,9 +92,9 @@ export class MysteryBoxService {
       );
     }
 
-    // Buscar prêmios ativos
+    // Buscar prêmios ativos da família
     const activePrizes = await this.mysteryPrizeRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
     });
 
     if (activePrizes.length === 0) {

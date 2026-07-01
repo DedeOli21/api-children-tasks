@@ -1,26 +1,36 @@
-import { Controller, Get, Patch, Body } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Query } from '@nestjs/common';
 import { StarsService } from './stars.service';
 import { UpdateStarsDto } from './dto/update-stars.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { User } from '../entities';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { AccessControlService } from '../auth/access-control.service';
+import { User, UserRole } from '../entities';
 
 @Controller('stars')
 export class StarsController {
-  constructor(private readonly starsService: StarsService) {}
+  constructor(
+    private readonly starsService: StarsService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   @Get()
-  getStars(@CurrentUser() user: User) {
-    return this.starsService.getStars(user.id);
+  async getStars(@CurrentUser() user: User, @Query('childId') childId?: string) {
+    const child = await this.accessControl.resolveChild(user, childId);
+    return this.starsService.getStars(child.id);
   }
 
+  // Ajustes manuais de estrelas são exclusivos do responsável
   @Patch('add')
-  addStars(@CurrentUser() user: User, @Body() dto: UpdateStarsDto) {
-    return this.starsService.addStars(user.id, dto);
+  @Roles(UserRole.PARENT)
+  async addStars(@CurrentUser() user: User, @Body() dto: UpdateStarsDto) {
+    const child = await this.accessControl.resolveChild(user, dto.childId);
+    return this.starsService.addStars(child.id, dto);
   }
 
   @Patch('subtract')
-  subtractStars(@CurrentUser() user: User, @Body() dto: UpdateStarsDto) {
-    return this.starsService.subtractStars(user.id, dto);
+  @Roles(UserRole.PARENT)
+  async subtractStars(@CurrentUser() user: User, @Body() dto: UpdateStarsDto) {
+    const child = await this.accessControl.resolveChild(user, dto.childId);
+    return this.starsService.subtractStars(child.id, dto);
   }
 }
-

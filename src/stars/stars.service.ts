@@ -44,7 +44,9 @@ export class StarsService {
     const historyEntry = this.historyRepository.create({
       userId,
       type: HistoryType.STARS_ADD,
-      description: `Adicionou ${dto.amount} estrela(s)`,
+      description: dto.reason
+        ? `Ganhou ${dto.amount} estrela(s): ${dto.reason}`
+        : `Adicionou ${dto.amount} estrela(s)`,
       starsChange: dto.amount,
     });
     await this.historyRepository.save(historyEntry);
@@ -76,7 +78,9 @@ export class StarsService {
     const historyEntry = this.historyRepository.create({
       userId,
       type: HistoryType.STARS_SUBTRACT,
-      description: `Removeu ${dto.amount} estrela(s)`,
+      description: dto.reason
+        ? `Perdeu ${dto.amount} estrela(s): ${dto.reason}`
+        : `Removeu ${dto.amount} estrela(s)`,
       starsChange: -dto.amount,
     });
     await this.historyRepository.save(historyEntry);

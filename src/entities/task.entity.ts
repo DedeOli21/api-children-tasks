@@ -13,6 +13,10 @@ export class Task {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Família dona da tarefa (id do responsável)
+  @Column({ name: 'family_id', type: 'text', nullable: true })
+  familyId: string | null;
+
   @Column()
   title: string;
 

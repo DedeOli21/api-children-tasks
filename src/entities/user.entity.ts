@@ -5,13 +5,16 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { DailyLog } from './daily-log.entity';
 import { HistoryEntry } from './history-entry.entity';
 
 export enum UserRole {
-  ADMIN = 'admin',
-  USER = 'user',
+  PARENT = 'parent',
+  CHILD = 'child',
+  TEACHER = 'teacher',
 }
 
 @Entity('users')
@@ -22,6 +25,7 @@ export class User {
   @Column()
   name: string;
 
+  // Para responsáveis/professores é o email; para crianças é o nome de usuário
   @Column({ unique: true })
   email: string;
 
@@ -30,9 +34,27 @@ export class User {
 
   @Column({
     type: 'text',
-    default: UserRole.USER,
+    default: UserRole.PARENT,
   })
   role: UserRole;
+
+  // Responsável dono da conta da criança (apenas para role = child)
+  @Column({ name: 'parent_id', type: 'text', nullable: true })
+  parentId: string | null;
+
+  @ManyToOne(() => User, (user) => user.children, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'parent_id' })
+  parent: User | null;
+
+  @OneToMany(() => User, (user) => user.parent)
+  children: User[];
+
+  // Código para o professor vincular o aluno (apenas para role = child)
+  @Column({ name: 'invite_code', type: 'text', nullable: true, unique: true })
+  inviteCode: string | null;
 
   @Column({ name: 'current_stars', default: 0 })
   currentStars: number;
@@ -55,4 +77,3 @@ export class User {
   @OneToMany(() => HistoryEntry, (history) => history.user)
   historyEntries: HistoryEntry[];
 }
-

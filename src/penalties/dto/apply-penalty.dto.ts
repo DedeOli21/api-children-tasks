@@ -1,13 +1,16 @@
-import { IsNotEmpty, IsString, IsNumber, IsPositive, IsOptional } from 'class-validator';
+import { IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 
 export class ApplyPenaltyDto {
-  @IsString()
-  @IsNotEmpty({ message: 'ID da penalidade é obrigatório' })
+  @IsUUID(undefined, { message: 'penaltyId inválido' })
   penaltyId: string;
 
-  @IsNumber({}, { message: 'Quantidade deve ser um número' })
-  @IsPositive({ message: 'Quantidade deve ser positiva' })
+  // Criança que recebe a penalidade
+  @IsUUID(undefined, { message: 'childId inválido' })
+  childId: string;
+
+  // Quantidade customizada (padrão: valor da penalidade)
   @IsOptional()
+  @IsInt()
+  @Min(1)
   amount?: number;
 }
-

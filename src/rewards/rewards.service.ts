@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reward, User, HistoryEntry, HistoryType } from '../entities';
 import { CreateRewardDto } from './dto/create-reward.dto';
+import { UpdateRewardDto } from './dto/update-reward.dto';
 
 @Injectable()
 export class RewardsService {
@@ -15,20 +16,38 @@ export class RewardsService {
     private historyRepository: Repository<HistoryEntry>,
   ) {}
 
-  async findAll() {
+  async findAll(familyId: string) {
     return this.rewardRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
       order: { createdAt: 'ASC' },
     });
   }
 
-  async create(createRewardDto: CreateRewardDto) {
-    const reward = this.rewardRepository.create(createRewardDto);
+  async create(createRewardDto: CreateRewardDto, familyId: string) {
+    const reward = this.rewardRepository.create({
+      ...createRewardDto,
+      familyId,
+    });
     return this.rewardRepository.save(reward);
   }
 
-  async delete(id: string) {
-    const reward = await this.rewardRepository.findOne({ where: { id } });
+  async update(id: string, updateRewardDto: UpdateRewardDto, familyId: string) {
+    const reward = await this.rewardRepository.findOne({
+      where: { id, familyId },
+    });
+
+    if (!reward) {
+      throw new NotFoundException('Recompensa não encontrada');
+    }
+
+    Object.assign(reward, updateRewardDto);
+    return this.rewardRepository.save(reward);
+  }
+
+  async delete(id: string, familyId: string) {
+    const reward = await this.rewardRepository.findOne({
+      where: { id, familyId },
+    });
 
     if (!reward) {
       throw new NotFoundException('Recompensa não encontrada');
@@ -38,9 +57,9 @@ export class RewardsService {
     return { message: 'Recompensa removida com sucesso' };
   }
 
-  async redeemReward(userId: string, rewardId: string) {
+  async redeemReward(userId: string, rewardId: string, familyId: string) {
     const reward = await this.rewardRepository.findOne({
-      where: { id: rewardId },
+      where: { id: rewardId, familyId },
     });
 
     if (!reward) {

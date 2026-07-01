@@ -5,39 +5,48 @@ import { UpdatePenaltyDto } from './dto/update-penalty.dto';
 import { ApplyPenaltyDto } from './dto/apply-penalty.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { AccessControlService } from '../auth/access-control.service';
 import { User, UserRole } from '../entities';
 
 @Controller('penalties')
 export class PenaltiesController {
-  constructor(private readonly penaltiesService: PenaltiesService) {}
+  constructor(
+    private readonly penaltiesService: PenaltiesService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   @Get()
-  findAll() {
-    return this.penaltiesService.findAll();
+  findAll(@CurrentUser() user: User) {
+    return this.penaltiesService.findAll(this.accessControl.familyIdOf(user));
   }
 
   @Post()
-  @Roles(UserRole.ADMIN)
-  create(@Body() createPenaltyDto: CreatePenaltyDto) {
-    return this.penaltiesService.create(createPenaltyDto);
+  @Roles(UserRole.PARENT)
+  create(@CurrentUser() user: User, @Body() createPenaltyDto: CreatePenaltyDto) {
+    return this.penaltiesService.create(createPenaltyDto, user.id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN)
-  update(@Param('id') id: string, @Body() updatePenaltyDto: UpdatePenaltyDto) {
-    return this.penaltiesService.update(id, updatePenaltyDto);
+  @Roles(UserRole.PARENT)
+  update(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() updatePenaltyDto: UpdatePenaltyDto,
+  ) {
+    return this.penaltiesService.update(id, updatePenaltyDto, user.id);
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  delete(@Param('id') id: string) {
-    return this.penaltiesService.delete(id);
+  @Roles(UserRole.PARENT)
+  delete(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.penaltiesService.delete(id, user.id);
   }
 
+  // Apenas o responsável aplica penalidades, sempre sobre uma criança
   @Post('apply')
-  @Roles(UserRole.ADMIN)
-  applyPenalty(@CurrentUser() user: User, @Body() dto: ApplyPenaltyDto) {
-    return this.penaltiesService.applyPenalty(user.id, dto);
+  @Roles(UserRole.PARENT)
+  async applyPenalty(@CurrentUser() user: User, @Body() dto: ApplyPenaltyDto) {
+    const child = await this.accessControl.resolveChild(user, dto.childId);
+    return this.penaltiesService.applyPenalty(child.id, user.id, dto);
   }
 }
-

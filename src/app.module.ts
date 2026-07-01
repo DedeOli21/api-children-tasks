@@ -11,6 +11,9 @@ import { HistoryModule } from './history/history.module';
 import { RoutinesModule } from './routines/routines.module';
 import { StreaksModule } from './streaks/streaks.module';
 import { MysteryBoxModule } from './mystery-box/mystery-box.module';
+import { ChildrenModule } from './children/children.module';
+import { TeacherModule } from './teacher/teacher.module';
+import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import {
@@ -23,7 +26,23 @@ import {
   Routine,
   RoutineLog,
   MysteryPrize,
+  TeacherStudent,
+  BehaviorReport,
 } from './entities';
+
+const entities = [
+  User,
+  Task,
+  DailyLog,
+  Penalty,
+  Reward,
+  HistoryEntry,
+  Routine,
+  RoutineLog,
+  MysteryPrize,
+  TeacherStudent,
+  BehaviorReport,
+];
 
 @Module({
   imports: [
@@ -32,17 +51,18 @@ import {
         ? {
             type: 'postgres',
             url: process.env.DATABASE_URL,
-            entities: [User, Task, DailyLog, Penalty, Reward, HistoryEntry, Routine, RoutineLog, MysteryPrize],
+            entities,
             synchronize: process.env.NODE_ENV !== 'production',
             ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
           }
         : {
             type: 'better-sqlite3',
             database: process.env.DATABASE_PATH || 'database.sqlite',
-            entities: [User, Task, DailyLog, Penalty, Reward, HistoryEntry, Routine, RoutineLog, MysteryPrize],
+            entities,
             synchronize: process.env.NODE_ENV !== 'production',
           },
     ),
+    TypeOrmModule.forFeature(entities),
     AuthModule,
     StarsModule,
     TasksModule,
@@ -52,9 +72,12 @@ import {
     RoutinesModule,
     StreaksModule,
     MysteryBoxModule,
+    ChildrenModule,
+    TeacherModule,
   ],
   controllers: [AppController],
   providers: [
+    LegacyMigrationService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

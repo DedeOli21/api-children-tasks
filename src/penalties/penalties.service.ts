@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Penalty, User, HistoryEntry, HistoryType } from '../entities';
@@ -20,20 +20,25 @@ export class PenaltiesService {
     private streaksService: StreaksService,
   ) {}
 
-  async findAll() {
+  async findAll(familyId: string) {
     return this.penaltyRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
       order: { createdAt: 'ASC' },
     });
   }
 
-  async create(createPenaltyDto: CreatePenaltyDto) {
-    const penalty = this.penaltyRepository.create(createPenaltyDto);
+  async create(createPenaltyDto: CreatePenaltyDto, familyId: string) {
+    const penalty = this.penaltyRepository.create({
+      ...createPenaltyDto,
+      familyId,
+    });
     return this.penaltyRepository.save(penalty);
   }
 
-  async update(id: string, updatePenaltyDto: UpdatePenaltyDto) {
-    const penalty = await this.penaltyRepository.findOne({ where: { id } });
+  async update(id: string, updatePenaltyDto: UpdatePenaltyDto, familyId: string) {
+    const penalty = await this.penaltyRepository.findOne({
+      where: { id, familyId },
+    });
 
     if (!penalty) {
       throw new NotFoundException('Penalidade não encontrada');
@@ -43,8 +48,10 @@ export class PenaltiesService {
     return this.penaltyRepository.save(penalty);
   }
 
-  async delete(id: string) {
-    const penalty = await this.penaltyRepository.findOne({ where: { id } });
+  async delete(id: string, familyId: string) {
+    const penalty = await this.penaltyRepository.findOne({
+      where: { id, familyId },
+    });
 
     if (!penalty) {
       throw new NotFoundException('Penalidade não encontrada');
@@ -54,9 +61,9 @@ export class PenaltiesService {
     return { message: 'Penalidade removida com sucesso' };
   }
 
-  async applyPenalty(userId: string, dto: ApplyPenaltyDto) {
+  async applyPenalty(childId: string, familyId: string, dto: ApplyPenaltyDto) {
     const penalty = await this.penaltyRepository.findOne({
-      where: { id: dto.penaltyId },
+      where: { id: dto.penaltyId, familyId },
     });
 
     if (!penalty) {
@@ -64,28 +71,28 @@ export class PenaltiesService {
     }
 
     const user = await this.userRepository.findOne({
-      where: { id: userId },
+      where: { id: childId },
     });
 
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    const amountToSubtract = dto.amount || penalty.amount;
-
-    if (user.currentStars < amountToSubtract) {
-      throw new BadRequestException('Estrelas insuficientes para aplicar penalidade');
-    }
+    // Não deixa o saldo ficar negativo
+    const amountToSubtract = Math.min(
+      dto.amount || penalty.amount,
+      user.currentStars,
+    );
 
     user.currentStars -= amountToSubtract;
     await this.userRepository.save(user);
 
     // Resetar streak quando penalidade é aplicada
-    await this.streaksService.resetStreak(userId);
+    await this.streaksService.resetStreak(childId);
 
     // Registrar no histórico
     const historyEntry = this.historyRepository.create({
-      userId,
+      userId: childId,
       type: HistoryType.PENALTY,
       description: `Penalidade aplicada: ${penalty.title} (${penalty.emoji}) - Streak resetado`,
       starsChange: -amountToSubtract,

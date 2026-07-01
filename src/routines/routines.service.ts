@@ -23,9 +23,9 @@ export class RoutinesService {
     return new Date().toISOString().split('T')[0];
   }
 
-  async findAll(userId: string) {
+  async findAll(userId: string, familyId: string) {
     const routines = await this.routineRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
       relations: ['tasks'],
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
@@ -65,9 +65,9 @@ export class RoutinesService {
     }));
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, userId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id },
+      where: { id, familyId },
       relations: ['tasks'],
     });
 
@@ -98,14 +98,14 @@ export class RoutinesService {
     };
   }
 
-  async create(createRoutineDto: CreateRoutineDto) {
+  async create(createRoutineDto: CreateRoutineDto, familyId: string) {
     const { taskIds, ...routineData } = createRoutineDto;
 
-    const routine = this.routineRepository.create(routineData);
+    const routine = this.routineRepository.create({ ...routineData, familyId });
 
     if (taskIds && taskIds.length > 0) {
       const tasks = await this.taskRepository.find({
-        where: { id: In(taskIds) },
+        where: { id: In(taskIds), familyId },
       });
       routine.tasks = tasks;
     }
@@ -113,9 +113,9 @@ export class RoutinesService {
     return this.routineRepository.save(routine);
   }
 
-  async update(id: string, updateRoutineDto: UpdateRoutineDto) {
+  async update(id: string, updateRoutineDto: UpdateRoutineDto, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id },
+      where: { id, familyId },
       relations: ['tasks'],
     });
 
@@ -130,7 +130,7 @@ export class RoutinesService {
     if (taskIds !== undefined) {
       if (taskIds.length > 0) {
         const tasks = await this.taskRepository.find({
-          where: { id: In(taskIds) },
+          where: { id: In(taskIds), familyId },
         });
         routine.tasks = tasks;
       } else {
@@ -141,8 +141,10 @@ export class RoutinesService {
     return this.routineRepository.save(routine);
   }
 
-  async delete(id: string) {
-    const routine = await this.routineRepository.findOne({ where: { id } });
+  async delete(id: string, familyId: string) {
+    const routine = await this.routineRepository.findOne({
+      where: { id, familyId },
+    });
 
     if (!routine) {
       throw new NotFoundException('Rotina não encontrada');
@@ -152,9 +154,9 @@ export class RoutinesService {
     return { message: 'Rotina removida com sucesso' };
   }
 
-  async addTask(routineId: string, taskId: string) {
+  async addTask(routineId: string, taskId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id: routineId },
+      where: { id: routineId, familyId },
       relations: ['tasks'],
     });
 
@@ -162,7 +164,9 @@ export class RoutinesService {
       throw new NotFoundException('Rotina não encontrada');
     }
 
-    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId, familyId },
+    });
 
     if (!task) {
       throw new NotFoundException('Tarefa não encontrada');
@@ -177,9 +181,9 @@ export class RoutinesService {
     return routine;
   }
 
-  async removeTask(routineId: string, taskId: string) {
+  async removeTask(routineId: string, taskId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id: routineId },
+      where: { id: routineId, familyId },
       relations: ['tasks'],
     });
 
@@ -193,9 +197,9 @@ export class RoutinesService {
     return routine;
   }
 
-  async complete(routineId: string, userId: string) {
+  async complete(routineId: string, userId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id: routineId },
+      where: { id: routineId, familyId },
     });
 
     if (!routine) {
@@ -232,9 +236,9 @@ export class RoutinesService {
     };
   }
 
-  async uncomplete(routineId: string, userId: string) {
+  async uncomplete(routineId: string, userId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id: routineId },
+      where: { id: routineId, familyId },
     });
 
     if (!routine) {
@@ -260,11 +264,11 @@ export class RoutinesService {
     };
   }
 
-  async getTodayProgress(userId: string) {
+  async getTodayProgress(userId: string, familyId: string) {
     const today = this.getTodayDate();
 
     const routines = await this.routineRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
     });
 
     const todayLogs = await this.routineLogRepository.find({

@@ -25,9 +25,9 @@ export class TasksService {
     return new Date().toISOString().split('T')[0];
   }
 
-  async findAll(userId: string) {
+  async findAll(userId: string, familyId: string) {
     const tasks = await this.taskRepository.find({
-      where: { active: true },
+      where: { active: true, familyId },
       order: { createdAt: 'ASC' },
     });
 
@@ -48,13 +48,13 @@ export class TasksService {
     }));
   }
 
-  async create(createTaskDto: CreateTaskDto) {
-    const task = this.taskRepository.create(createTaskDto);
+  async create(createTaskDto: CreateTaskDto, familyId: string) {
+    const task = this.taskRepository.create({ ...createTaskDto, familyId });
     return this.taskRepository.save(task);
   }
 
-  async update(id: string, updateTaskDto: UpdateTaskDto) {
-    const task = await this.taskRepository.findOne({ where: { id } });
+  async update(id: string, updateTaskDto: UpdateTaskDto, familyId: string) {
+    const task = await this.taskRepository.findOne({ where: { id, familyId } });
 
     if (!task) {
       throw new NotFoundException('Tarefa não encontrada');
@@ -64,8 +64,8 @@ export class TasksService {
     return this.taskRepository.save(task);
   }
 
-  async delete(id: string) {
-    const task = await this.taskRepository.findOne({ where: { id } });
+  async delete(id: string, familyId: string) {
+    const task = await this.taskRepository.findOne({ where: { id, familyId } });
 
     if (!task) {
       throw new NotFoundException('Tarefa não encontrada');
@@ -76,16 +76,18 @@ export class TasksService {
   }
 
   async completeTask(userId: string, taskId: string) {
-    const task = await this.taskRepository.findOne({ where: { id: taskId } });
-
-    if (!task) {
-      throw new NotFoundException('Tarefa não encontrada');
-    }
-
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId, familyId: user.parentId ?? '' },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada');
     }
 
     const today = this.getTodayDate();
@@ -145,16 +147,18 @@ export class TasksService {
   }
 
   async uncompleteTask(userId: string, taskId: string) {
-    const task = await this.taskRepository.findOne({ where: { id: taskId } });
-
-    if (!task) {
-      throw new NotFoundException('Tarefa não encontrada');
-    }
-
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
+    }
+
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId, familyId: user.parentId ?? '' },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Tarefa não encontrada');
     }
 
     const today = this.getTodayDate();

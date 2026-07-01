@@ -42,8 +42,10 @@ export class StreaksService {
    * Verifica se o usuário completou todas as tarefas do dia
    */
   async hasCompletedAllTasks(userId: string, date: string): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    // Considera apenas as tarefas da família da criança
     const activeTasks = await this.taskRepository.find({
-      where: { active: true },
+      where: { active: true, familyId: user?.parentId ?? '' },
     });
 
     if (activeTasks.length === 0) return true;

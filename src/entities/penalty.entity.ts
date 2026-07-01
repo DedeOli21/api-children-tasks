@@ -11,6 +11,10 @@ export class Penalty {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Família dona da penalidade (id do responsável)
+  @Column({ name: 'family_id', type: 'text', nullable: true })
+  familyId: string | null;
+
   @Column()
   title: string;
 

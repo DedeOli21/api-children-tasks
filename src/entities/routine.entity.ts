@@ -14,6 +14,10 @@ export class Routine {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Família dona da rotina (id do responsável)
+  @Column({ name: 'family_id', type: 'text', nullable: true })
+  familyId: string | null;
+
   @Column()
   name: string;
 

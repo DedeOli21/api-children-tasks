@@ -28,7 +28,12 @@ export class RoutineLog {
   @Column({ default: false })
   completed: boolean;
 
-  @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
+  // Tipo compatível com SQLite (dev) e PostgreSQL (prod)
+  @Column({
+    name: 'completed_at',
+    type: process.env.DATABASE_TYPE === 'postgres' ? 'timestamp' : 'datetime',
+    nullable: true,
+  })
   completedAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
