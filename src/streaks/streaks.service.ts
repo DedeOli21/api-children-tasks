@@ -2,7 +2,15 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
-import { User, UserRole, DailyLog, Task, HistoryEntry, HistoryType } from '../entities';
+import {
+  User,
+  UserRole,
+  DailyLog,
+  Task,
+  HistoryEntry,
+  HistoryType,
+  TaskExecutionStatus,
+} from '../entities';
 
 /**
  * Motor de streaks:
@@ -73,7 +81,9 @@ export class StreaksService {
     });
 
     const completedTaskIds = new Set(
-      dailyLogs.filter((log) => log.completed).map((log) => log.taskId),
+      dailyLogs
+        .filter((log) => log.status !== TaskExecutionStatus.PENDING)
+        .map((log) => log.taskId),
     );
 
     return activeTasks.every((task) => completedTaskIds.has(task.id));

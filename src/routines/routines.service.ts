@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Routine } from '../entities/routine.entity';
-import { Task, DailyLog, RoutineLog } from '../entities';
+import { Task, DailyLog, RoutineLog, TaskExecutionStatus } from '../entities';
 import { CreateRoutineDto } from './dto/create-routine.dto';
 import { UpdateRoutineDto } from './dto/update-routine.dto';
 
@@ -47,7 +47,9 @@ export class RoutinesService {
     });
 
     const completedTaskIds = new Set(
-      todayLogs.filter((log) => log.completed).map((log) => log.taskId),
+      todayLogs
+        .filter((log) => log.status !== TaskExecutionStatus.PENDING)
+        .map((log) => log.taskId),
     );
 
     // Adicionar status de completado em cada rotina e suas tarefas
@@ -82,7 +84,9 @@ export class RoutinesService {
     });
 
     const completedTaskIds = new Set(
-      todayLogs.filter((log) => log.completed).map((log) => log.taskId),
+      todayLogs
+        .filter((log) => log.status !== TaskExecutionStatus.PENDING)
+        .map((log) => log.taskId),
     );
 
     return {
