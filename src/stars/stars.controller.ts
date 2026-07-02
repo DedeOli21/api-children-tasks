@@ -46,9 +46,9 @@ export class StarsController {
     return this.starsService.suggest(user, child, dto);
   }
 
-  // Caixa de aprovação do responsável (?status=approved|rejected para histórico)
+  // Caixa de aprovação do responsável; a criança vê as próprias pendentes
   @Get('requests')
-  @Roles(UserRole.PARENT)
+  @Roles(UserRole.PARENT, UserRole.CHILD)
   listRequests(@CurrentUser() user: User, @Query('status') status?: string) {
     const parsed = Object.values(StarRequestStatus).includes(status as StarRequestStatus)
       ? (status as StarRequestStatus)

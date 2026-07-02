@@ -145,17 +145,25 @@ export class StarsService {
     };
   }
 
-  // Caixa de aprovação do responsável (pendentes dos seus filhos)
-  async listRequestsForParent(parent: User, status?: StarRequestStatus) {
-    const children = await this.userRepository.find({
-      where: { role: UserRole.CHILD, parentId: parent.id },
-      select: ['id'],
-    });
-    if (children.length === 0) return [];
+  // Caixa de aprovação do responsável (pendentes dos seus filhos).
+  // A criança também pode consultar as próprias pendentes — alimenta o aviso
+  // "Você recebeu estrelas da sua terapeuta! Aguardando o chefe aprovar!".
+  async listRequestsForParent(actor: User, status?: StarRequestStatus) {
+    let childIds: string[];
+    if (actor.role === UserRole.CHILD) {
+      childIds = [actor.id];
+    } else {
+      const children = await this.userRepository.find({
+        where: { role: UserRole.CHILD, parentId: actor.id },
+        select: ['id'],
+      });
+      childIds = children.map((c) => c.id);
+    }
+    if (childIds.length === 0) return [];
 
     const requests = await this.starRequestRepository.find({
       where: {
-        childId: In(children.map((c) => c.id)),
+        childId: In(childIds),
         status: status ?? StarRequestStatus.PENDING,
       },
       relations: ['child', 'createdBy'],
