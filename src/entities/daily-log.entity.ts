@@ -10,6 +10,18 @@ import {
 import { User } from './user.entity';
 import { Task } from './task.entity';
 
+/**
+ * Fluxo de aprovação da execução de uma tarefa:
+ *  PENDING   → tarefa do dia ainda não feita
+ *  COMPLETED → criança marcou como feita, aguardando o responsável
+ *  APPROVED  → responsável aprovou; estrelas são creditadas neste momento
+ */
+export enum TaskExecutionStatus {
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  APPROVED = 'approved',
+}
+
 @Entity('daily_logs')
 @Index(['userId', 'date', 'taskId'], { unique: true })
 export class DailyLog {
@@ -25,8 +37,37 @@ export class DailyLog {
   @Column({ name: 'task_id' })
   taskId: string;
 
+  /**
+   * @deprecated Mantido por compatibilidade com dados existentes.
+   * A fonte de verdade é `status`; este campo é derivado
+   * (completed = status !== PENDING).
+   */
   @Column({ default: false })
   completed: boolean;
+
+  @Column({
+    type: 'text',
+    default: TaskExecutionStatus.PENDING,
+  })
+  status: TaskExecutionStatus;
+
+  @Column({
+    name: 'completed_at',
+    type: process.env.DATABASE_TYPE === 'postgres' ? 'timestamp' : 'datetime',
+    nullable: true,
+  })
+  completedAt: Date | null;
+
+  @Column({
+    name: 'approved_at',
+    type: process.env.DATABASE_TYPE === 'postgres' ? 'timestamp' : 'datetime',
+    nullable: true,
+  })
+  approvedAt: Date | null;
+
+  // Responsável que aprovou a execução
+  @Column({ name: 'approved_by_id', type: 'text', nullable: true })
+  approvedById: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -39,4 +80,3 @@ export class DailyLog {
   @JoinColumn({ name: 'task_id' })
   task: Task;
 }
-

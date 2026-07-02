@@ -15,6 +15,9 @@ import {
   MysteryPrizeRarity,
   TeacherStudent,
   BehaviorReport,
+  Mission,
+  RoutineTemplate,
+  RoutineTemplateTask,
 } from '../entities';
 import { generateInviteCode } from '../children/invite-code.util';
 
@@ -30,6 +33,9 @@ const entities = [
   MysteryPrize,
   TeacherStudent,
   BehaviorReport,
+  Mission,
+  RoutineTemplate,
+  RoutineTemplateTask,
 ];
 
 const dataSource = new DataSource(

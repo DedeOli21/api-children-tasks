@@ -11,4 +11,9 @@ export * from './mystery-prize.entity';
 export { MysteryPrizeRarity } from './mystery-prize.entity';
 export * from './teacher-student.entity';
 export * from './behavior-report.entity';
+export * from './mission.entity';
+export { MissionStatus } from './mission.entity';
+export * from './routine-template.entity';
+export * from './routine-template-task.entity';
+export { TaskExecutionStatus } from './daily-log.entity';
 

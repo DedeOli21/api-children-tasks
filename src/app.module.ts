@@ -29,6 +29,9 @@ import {
   MysteryPrize,
   TeacherStudent,
   BehaviorReport,
+  Mission,
+  RoutineTemplate,
+  RoutineTemplateTask,
 } from './entities';
 
 const entities = [
@@ -43,6 +46,9 @@ const entities = [
   MysteryPrize,
   TeacherStudent,
   BehaviorReport,
+  Mission,
+  RoutineTemplate,
+  RoutineTemplateTask,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma
