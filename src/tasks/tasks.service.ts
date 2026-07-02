@@ -1,7 +1,21 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Task, DailyLog, User, HistoryEntry, HistoryType } from '../entities';
+import {
+  Task,
+  DailyLog,
+  TaskExecutionStatus,
+  User,
+  HistoryEntry,
+  HistoryType,
+} from '../entities';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { StreaksService } from '../streaks/streaks.service';
@@ -38,14 +52,19 @@ export class TasksService {
       where: { userId, date: today },
     });
 
-    const completedTaskIds = new Set(
-      todayLogs.filter((log) => log.completed).map((log) => log.taskId),
+    const statusByTaskId = new Map(
+      todayLogs.map((log) => [log.taskId, log.status]),
     );
 
-    return tasks.map((task) => ({
-      ...task,
-      completedToday: completedTaskIds.has(task.id),
-    }));
+    return tasks.map((task) => {
+      const status = statusByTaskId.get(task.id) ?? TaskExecutionStatus.PENDING;
+      return {
+        ...task,
+        status,
+        completedToday: status !== TaskExecutionStatus.PENDING,
+        approvedToday: status === TaskExecutionStatus.APPROVED,
+      };
+    });
   }
 
   async create(createTaskDto: CreateTaskDto, familyId: string) {
@@ -97,52 +116,122 @@ export class TasksService {
       where: { userId, taskId, date: today },
     });
 
+    if (dailyLog?.status === TaskExecutionStatus.APPROVED) {
+      throw new BadRequestException('Tarefa já foi aprovada hoje');
+    }
+
     if (dailyLog) {
+      dailyLog.status = TaskExecutionStatus.COMPLETED;
       dailyLog.completed = true;
+      dailyLog.completedAt = new Date();
     } else {
       dailyLog = this.dailyLogRepository.create({
         userId,
         taskId,
         date: today,
         completed: true,
+        status: TaskExecutionStatus.COMPLETED,
+        completedAt: new Date(),
       });
     }
 
     await this.dailyLogRepository.save(dailyLog);
 
-    // Atualizar streak e obter multiplicador
+    // O streak conta o esforço da criança (marcou tudo), mas as estrelas
+    // só são creditadas quando o responsável aprova (approveLog)
     const streakInfo = await this.streaksService.updateStreak(userId);
-    const multiplier = streakInfo.multiplier;
-    const baseStars = 1;
-    const starsToAdd = baseStars * multiplier;
-
-    // Adicionar estrelas com multiplicador
-    user.currentStars += starsToAdd;
-    await this.userRepository.save(user);
-
-    // Registrar no histórico
-    const description = multiplier > 1
-      ? `Completou tarefa: ${task.title} (${multiplier}x streak!)`
-      : `Completou tarefa: ${task.title}`;
-    
-    const historyEntry = this.historyRepository.create({
-      userId,
-      type: HistoryType.TASK_COMPLETE,
-      description,
-      starsChange: starsToAdd,
-    });
-    await this.historyRepository.save(historyEntry);
 
     return {
       task,
       dailyLog,
+      status: dailyLog.status,
       currentStars: user.currentStars,
+      starsEarned: 0,
+      streak: streakInfo.streak,
+      message: `Tarefa "${task.title}" enviada para aprovação! Aguardando o chefe aprovar 😄`,
+    };
+  }
+
+  // Fila "Aguardando Revisão": execuções marcadas pela criança e ainda não aprovadas
+  async pendingApproval(parentId: string, childId?: string) {
+    const logs = await this.dailyLogRepository.find({
+      where: {
+        status: TaskExecutionStatus.COMPLETED,
+        user: { parentId, ...(childId ? { id: childId } : {}) },
+      },
+      relations: ['task', 'user'],
+      order: { date: 'DESC', completedAt: 'ASC' },
+      take: 100,
+    });
+
+    return logs.map((log) => ({
+      logId: log.id,
+      taskId: log.taskId,
+      title: log.task?.title,
+      iconEmoji: log.task?.iconEmoji,
+      date: log.date,
+      childId: log.userId,
+      childName: log.user?.name,
+      completedAt: log.completedAt,
+    }));
+  }
+
+  // Aprovação do responsável: único ponto que credita as estrelas da tarefa
+  async approveLog(parentId: string, logId: string) {
+    const log = await this.dailyLogRepository.findOne({
+      where: { id: logId },
+      relations: ['task', 'user'],
+    });
+
+    if (!log) {
+      throw new NotFoundException('Execução de tarefa não encontrada');
+    }
+    if (log.user?.parentId !== parentId) {
+      throw new ForbiddenException('Essa tarefa não pertence à sua família');
+    }
+    if (log.status === TaskExecutionStatus.APPROVED) {
+      throw new BadRequestException('Tarefa já foi aprovada');
+    }
+    if (log.status !== TaskExecutionStatus.COMPLETED) {
+      throw new BadRequestException('A criança ainda não marcou esta tarefa como feita');
+    }
+
+    log.status = TaskExecutionStatus.APPROVED;
+    log.approvedAt = new Date();
+    log.approvedById = parentId;
+    await this.dailyLogRepository.save(log);
+
+    const child = log.user;
+    const multiplier = this.streaksService.getStreakMultiplier(
+      child.currentStreak,
+    );
+    const starsToAdd = 1 * multiplier;
+
+    child.currentStars += starsToAdd;
+    await this.userRepository.save(child);
+
+    const taskTitle = log.task?.title ?? 'Tarefa';
+    await this.historyRepository.save(
+      this.historyRepository.create({
+        userId: child.id,
+        type: HistoryType.TASK_COMPLETE,
+        description:
+          multiplier > 1
+            ? `Tarefa aprovada: ${taskTitle} (${multiplier}x streak!)`
+            : `Tarefa aprovada: ${taskTitle}`,
+        starsChange: starsToAdd,
+      }),
+    );
+
+    return {
+      logId: log.id,
+      taskId: log.taskId,
+      status: log.status,
+      childId: child.id,
+      currentStars: child.currentStars,
       starsEarned: starsToAdd,
       multiplier,
-      streak: streakInfo.streak,
-      message: multiplier > 1
-        ? `Tarefa "${task.title}" completada! +${starsToAdd} estrelas (${multiplier}x streak!)`
-        : `Tarefa "${task.title}" completada! +${starsToAdd} estrela`,
+      message: `Tarefa "${taskTitle}" aprovada! +${starsToAdd} estrela(s) para ${child.name}`,
     };
   }
 
@@ -171,30 +260,42 @@ export class TasksService {
       throw new NotFoundException('Tarefa não estava completada hoje');
     }
 
-    dailyLog.completed = false;
-    await this.dailyLogRepository.save(dailyLog);
-
-    // Remover 1 estrela (não deixar negativo)
-    if (user.currentStars > 0) {
-      user.currentStars -= 1;
-      await this.userRepository.save(user);
+    // Aprovada = estrelas já creditadas; desfazer exigiria estorno.
+    // O responsável pode ajustar o saldo manualmente se necessário.
+    if (dailyLog.status === TaskExecutionStatus.APPROVED) {
+      throw new BadRequestException(
+        'Tarefa já aprovada não pode ser desmarcada',
+      );
     }
+
+    dailyLog.completed = false;
+    dailyLog.status = TaskExecutionStatus.PENDING;
+    dailyLog.completedAt = null;
+    await this.dailyLogRepository.save(dailyLog);
 
     return {
       task,
       dailyLog,
+      status: dailyLog.status,
       currentStars: user.currentStars,
-      message: `Tarefa "${task.title}" desmarcada. -1 estrela`,
+      message: `Tarefa "${task.title}" desmarcada`,
     };
   }
 
   async resetTasks(userId: string) {
     const today = this.getTodayDate();
 
-    // Um único UPDATE em vez de N saves em loop
+    // Um único UPDATE em vez de N saves em loop.
+    // Estrelas de execuções já aprovadas não são estornadas.
     const result = await this.dailyLogRepository.update(
       { userId, date: today, completed: true },
-      { completed: false },
+      {
+        completed: false,
+        status: TaskExecutionStatus.PENDING,
+        completedAt: null,
+        approvedAt: null,
+        approvedById: null,
+      },
     );
 
     return {

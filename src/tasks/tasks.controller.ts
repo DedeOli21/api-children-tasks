@@ -36,6 +36,23 @@ export class TasksController {
     );
   }
 
+  // Fila "Aguardando Revisão" do responsável
+  @Get('pending-approval')
+  @Roles(UserRole.PARENT)
+  pendingApproval(
+    @CurrentUser() user: User,
+    @Query('childId') childId?: string,
+  ) {
+    return this.tasksService.pendingApproval(user.id, childId);
+  }
+
+  // Aprova a execução e libera as estrelas (workflow de aprovação)
+  @Patch('logs/:logId/approve')
+  @Roles(UserRole.PARENT)
+  approveLog(@CurrentUser() user: User, @Param('logId') logId: string) {
+    return this.tasksService.approveLog(user.id, logId);
+  }
+
   @Post()
   @Roles(UserRole.PARENT)
   create(@CurrentUser() user: User, @Body() createTaskDto: CreateTaskDto) {

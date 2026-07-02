@@ -14,6 +14,8 @@ import { StreaksModule } from './streaks/streaks.module';
 import { MysteryBoxModule } from './mystery-box/mystery-box.module';
 import { ChildrenModule } from './children/children.module';
 import { TeacherModule } from './teacher/teacher.module';
+import { MissionsModule } from './missions/missions.module';
+import { RoutineTemplatesModule } from './routine-templates/routine-templates.module';
 import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -88,6 +90,8 @@ const shouldSynchronize =
     MysteryBoxModule,
     ChildrenModule,
     TeacherModule,
+    MissionsModule,
+    RoutineTemplatesModule,
   ],
   controllers: [AppController],
   providers: [
