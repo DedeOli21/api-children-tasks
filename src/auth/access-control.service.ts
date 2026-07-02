@@ -6,13 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, UserRole, TeacherStudent } from '../entities';
+import { User, UserRole, TeacherStudent, TherapistChild } from '../entities';
 
 /**
  * Centraliza as regras de acesso entre papéis:
  * - Criança só age sobre si mesma.
  * - Responsável age sobre os próprios filhos.
  * - Professor age sobre alunos vinculados (via código de convite).
+ * - Terapeuta age sobre pacientes vinculados (vínculo criado pelo responsável).
  */
 @Injectable()
 export class AccessControlService {
@@ -21,6 +22,8 @@ export class AccessControlService {
     private userRepository: Repository<User>,
     @InjectRepository(TeacherStudent)
     private teacherStudentRepository: Repository<TeacherStudent>,
+    @InjectRepository(TherapistChild)
+    private therapistChildRepository: Repository<TherapistChild>,
   ) {}
 
   /**
@@ -61,6 +64,16 @@ export class AccessControlService {
       });
       if (!link) {
         throw new ForbiddenException('Aluno não vinculado a você');
+      }
+      return child;
+    }
+
+    if (actor.role === UserRole.THERAPIST) {
+      const link = await this.therapistChildRepository.findOne({
+        where: { therapistId: actor.id, childId: child.id },
+      });
+      if (!link) {
+        throw new ForbiddenException('Paciente não vinculado a você');
       }
       return child;
     }

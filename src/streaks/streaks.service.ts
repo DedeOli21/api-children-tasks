@@ -1,10 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User, DailyLog, Task, HistoryEntry, HistoryType } from '../entities';
+import { Cron } from '@nestjs/schedule';
+import { User, UserRole, DailyLog, Task, HistoryEntry, HistoryType } from '../entities';
 
+/**
+ * Motor de streaks:
+ * - O streak conta dias em que a criança completou todos os combinados.
+ * - Dias perdidos consomem um "Streak Freeze" do inventário (se houver)
+ *   antes de quebrar a sequência.
+ * - Penalidade continua sendo reset imediato (regra disciplinar explícita —
+ *   o freeze protege contra dias incompletos, não contra mau comportamento).
+ * - Avaliação acontece de forma preguiçosa (em cada leitura/conclusão) e
+ *   também via cron diário, para quem ficou dias sem abrir o app.
+ */
 @Injectable()
 export class StreaksService {
+  private readonly logger = new Logger(StreaksService.name);
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -16,21 +29,29 @@ export class StreaksService {
     private historyRepository: Repository<HistoryEntry>,
   ) {}
 
-  private getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+  private toDateString(date: Date): string {
+    return date.toISOString().split('T')[0];
   }
 
-  private getYesterdayDate(): string {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    return yesterday.toISOString().split('T')[0];
+  private getTodayDate(): string {
+    return this.toDateString(new Date());
+  }
+
+  private previousDay(date: string): string {
+    const d = new Date(`${date}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return this.toDateString(d);
+  }
+
+  private nextDay(date: string): string {
+    const d = new Date(`${date}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return this.toDateString(d);
   }
 
   /**
-   * Calcula o multiplicador baseado no streak atual
-   * - 0-1 dias: 1x (normal)
-   * - 2-5 dias: 2x (dobro)
-   * - 6+ dias: 3x (triplo)
+   * Multiplicador baseado no streak atual:
+   * 0-1 dias: 1x · 2-5 dias: 2x · 6+ dias: 3x
    */
   getStreakMultiplier(streak: number): number {
     if (streak >= 6) return 3;
@@ -38,9 +59,6 @@ export class StreaksService {
     return 1;
   }
 
-  /**
-   * Verifica se o usuário completou todas as tarefas do dia
-   */
   async hasCompletedAllTasks(userId: string, date: string): Promise<boolean> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     // Considera apenas as tarefas da família da criança
@@ -61,9 +79,6 @@ export class StreaksService {
     return activeTasks.every((task) => completedTaskIds.has(task.id));
   }
 
-  /**
-   * Verifica se o usuário recebeu alguma penalidade no dia
-   */
   async hasReceivedPenalty(userId: string, date: string): Promise<boolean> {
     const startOfDay = new Date(date + 'T00:00:00.000Z');
     const endOfDay = new Date(date + 'T23:59:59.999Z');
@@ -82,72 +97,110 @@ export class StreaksService {
   }
 
   /**
-   * Atualiza o streak do usuário baseado nas regras:
-   * - Mantém streak se completou todas as tarefas E não recebeu penalidade
-   * - Reseta streak se recebeu penalidade OU não completou todas as tarefas
+   * Preenche a lacuna entre o último dia contado e ontem:
+   * - dia completo → streak continua (e incrementa, cobrindo contagem retroativa);
+   * - dia incompleto com freeze no inventário → consome 1 e preserva o streak;
+   * - dia incompleto sem freeze → quebra a sequência.
+   * Retorna quantos freezes foram consumidos (para feedback).
    */
-  async updateStreak(userId: string): Promise<{ streak: number; multiplier: number; wasReset: boolean }> {
+  private async evaluatePendingDays(user: User): Promise<number> {
+    const today = this.getTodayDate();
+    const yesterday = this.previousDay(today);
+    let freezesUsed = 0;
+
+    if (!user.lastStreakDate || user.currentStreak === 0) return 0;
+    if (user.lastStreakDate >= yesterday) return 0; // nada pendente
+
+    let cursor = this.nextDay(user.lastStreakDate);
+    while (cursor <= yesterday) {
+      const completed = await this.hasCompletedAllTasks(user.id, cursor);
+      if (completed) {
+        user.currentStreak += 1;
+        user.lastStreakDate = cursor;
+      } else if (user.streakFreezes > 0) {
+        user.streakFreezes -= 1;
+        user.lastStreakDate = cursor; // dia "congelado": não quebra nem incrementa
+        freezesUsed += 1;
+      } else {
+        user.currentStreak = 0;
+        user.lastStreakDate = null;
+        break;
+      }
+      cursor = this.nextDay(cursor);
+    }
+
+    if (user.currentStreak > user.longestStreak) {
+      user.longestStreak = user.currentStreak;
+    }
+    await this.userRepository.save(user);
+    return freezesUsed;
+  }
+
+  /**
+   * Chamado quando a criança completa uma tarefa (e nas leituras de streak).
+   * Nunca zera a sequência no meio do dia — dias passados são resolvidos
+   * por evaluatePendingDays e o dia atual só conta quando fecha completo.
+   */
+  async updateStreak(userId: string): Promise<{ streak: number; multiplier: number; wasReset: boolean; freezesUsed: number }> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
 
+    const freezesUsed = await this.evaluatePendingDays(user);
+
     const today = this.getTodayDate();
-    const yesterday = this.getYesterdayDate();
+    const yesterday = this.previousDay(today);
 
-    // Verificar condições para manter o streak
-    const completedAllTasks = await this.hasCompletedAllTasks(userId, today);
-    const receivedPenalty = await this.hasReceivedPenalty(userId, today);
-
-    let wasReset = false;
-
-    // Se recebeu penalidade OU não completou todas as tarefas, reseta o streak
-    if (receivedPenalty || !completedAllTasks) {
-      if (user.currentStreak > 0) {
-        wasReset = true;
+    // Penalidade hoje = reset imediato (regra disciplinar, freeze não protege)
+    if (await this.hasReceivedPenalty(userId, today)) {
+      const wasReset = user.currentStreak > 0;
+      if (wasReset) {
         user.currentStreak = 0;
         user.lastStreakDate = null;
         await this.userRepository.save(user);
       }
-      return {
-        streak: 0,
-        multiplier: 1,
-        wasReset,
-      };
+      return { streak: 0, multiplier: 1, wasReset, freezesUsed };
     }
 
-    // Se completou tudo e não recebeu penalidade, incrementa o streak
-    if (user.lastStreakDate === today) {
-      // Já atualizou hoje, retorna o valor atual
+    // Dia ainda incompleto: mantém o streak atual (não zera no meio do dia)
+    if (!(await this.hasCompletedAllTasks(userId, today))) {
       return {
         streak: user.currentStreak,
         multiplier: this.getStreakMultiplier(user.currentStreak),
         wasReset: false,
+        freezesUsed,
       };
     }
 
-    if (user.lastStreakDate === yesterday) {
-      // Continua o streak
-      user.currentStreak += 1;
-    } else if (user.lastStreakDate === null || user.lastStreakDate < yesterday) {
-      // Novo streak (primeiro dia ou streak quebrado)
-      user.currentStreak = 1;
+    // Já contabilizou hoje
+    if (user.lastStreakDate === today) {
+      return {
+        streak: user.currentStreak,
+        multiplier: this.getStreakMultiplier(user.currentStreak),
+        wasReset: false,
+        freezesUsed,
+      };
     }
 
+    // Fecha o dia: continua a sequência ou começa uma nova
+    user.currentStreak = user.lastStreakDate === yesterday ? user.currentStreak + 1 : 1;
     user.lastStreakDate = today;
+    if (user.currentStreak > user.longestStreak) {
+      user.longestStreak = user.currentStreak;
+    }
     await this.userRepository.save(user);
 
     return {
       streak: user.currentStreak,
       multiplier: this.getStreakMultiplier(user.currentStreak),
       wasReset: false,
+      freezesUsed,
     };
   }
 
-  /**
-   * Reseta o streak do usuário (usado quando penalidade é aplicada)
-   */
+  // Reset explícito (penalidade aplicada pelo responsável)
   async resetStreak(userId: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
@@ -162,9 +215,6 @@ export class StreaksService {
     }
   }
 
-  /**
-   * Obtém informações do streak atual
-   */
   async getStreak(userId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
 
@@ -172,15 +222,50 @@ export class StreaksService {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    // Atualiza o streak antes de retornar
     const streakInfo = await this.updateStreak(userId);
 
     return {
       currentStreak: streakInfo.streak,
       multiplier: streakInfo.multiplier,
+      longestStreak: Math.max(user.longestStreak, streakInfo.streak),
+      streakFreezes: user.streakFreezes,
       lastStreakDate: user.lastStreakDate,
       nextMultiplierThreshold: streakInfo.streak < 2 ? 2 : streakInfo.streak < 6 ? 6 : null,
     };
   }
-}
 
+  // Responsável concede freezes ao inventário da criança
+  async grantFreezes(childId: string, amount: number) {
+    const child = await this.userRepository.findOne({ where: { id: childId } });
+    if (!child) {
+      throw new NotFoundException('Criança não encontrada');
+    }
+    child.streakFreezes += amount;
+    await this.userRepository.save(child);
+    return {
+      childId: child.id,
+      streakFreezes: child.streakFreezes,
+      message: `+${amount} congelamento(s) de streak para ${child.name}`,
+    };
+  }
+
+  // Cron diário: fecha o dia anterior de todas as crianças, consumindo
+  // freezes quando necessário (cobre quem ficou sem abrir o app).
+  @Cron('10 0 * * *')
+  async evaluateAllChildren() {
+    const children = await this.userRepository.find({
+      where: { role: UserRole.CHILD },
+    });
+    let frozen = 0;
+    for (const child of children) {
+      try {
+        frozen += await this.evaluatePendingDays(child);
+      } catch (error) {
+        this.logger.error(`Falha ao avaliar streak de ${child.id}`, error as Error);
+      }
+    }
+    this.logger.log(
+      `Streaks avaliados para ${children.length} criança(s); ${frozen} freeze(s) consumido(s)`,
+    );
+  }
+}

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { StarsModule } from './stars/stars.module';
@@ -16,6 +17,9 @@ import { ChildrenModule } from './children/children.module';
 import { TeacherModule } from './teacher/teacher.module';
 import { MissionsModule } from './missions/missions.module';
 import { RoutineTemplatesModule } from './routine-templates/routine-templates.module';
+import { TherapistsModule } from './therapists/therapists.module';
+import { ObservationsModule } from './observations/observations.module';
+import { MessagesModule } from './messages/messages.module';
 import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -87,6 +91,8 @@ const shouldSynchronize =
     TypeOrmModule.forFeature(entities),
     // Limite global generoso; login/register têm limites mais duros via @Throttle
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    // Cron do motor de streaks (avaliação diária)
+    ScheduleModule.forRoot(),
     AuthModule,
     StarsModule,
     TasksModule,
@@ -100,6 +106,9 @@ const shouldSynchronize =
     TeacherModule,
     MissionsModule,
     RoutineTemplatesModule,
+    TherapistsModule,
+    ObservationsModule,
+    MessagesModule,
   ],
   controllers: [AppController],
   providers: [

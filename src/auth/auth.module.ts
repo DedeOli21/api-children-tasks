@@ -7,11 +7,11 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { AccessControlService } from './access-control.service';
 import { getJwtSecret } from '../config/jwt.config';
-import { User, TeacherStudent } from '../entities';
+import { User, TeacherStudent, TherapistChild } from '../entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, TeacherStudent]),
+    TypeOrmModule.forFeature([User, TeacherStudent, TherapistChild]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: getJwtSecret(),

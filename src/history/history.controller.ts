@@ -1,10 +1,14 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { HistoryService } from './history.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { User, UserRole } from '../entities';
 import { AccessControlService } from '../auth/access-control.service';
-import { User } from '../entities';
 
+// Linha do tempo completa (casa + escola): responsável, a própria criança e
+// a terapeuta. O professor vê apenas o recorte acadêmico (suas missões/relatórios).
 @Controller('history')
+@Roles(UserRole.PARENT, UserRole.CHILD, UserRole.THERAPIST)
 export class HistoryController {
   constructor(
     private readonly historyService: HistoryService,
