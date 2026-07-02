@@ -1,25 +1,35 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { createTestApp } from './utils/test-app';
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+describe('App (e2e)', () => {
+  let app: INestApplication;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+  beforeAll(async () => {
+    app = await createTestApp();
   });
 
-  it('/ (GET)', () => {
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('GET /api/health responde 200 com status ok', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api/health')
       .expect(200)
-      .expect('Hello World!');
+      .expect((res) => {
+        expect(res.body.status).toBe('ok');
+        expect(typeof res.body.timestamp).toBe('string');
+      });
+  });
+
+  it('rota protegida sem token responde 401', () => {
+    return request(app.getHttpServer()).get('/api/children').expect(401);
+  });
+
+  it('rota inexistente responde 404', () => {
+    return request(app.getHttpServer())
+      .get('/api/rota-que-nao-existe')
+      .expect(404);
   });
 });
