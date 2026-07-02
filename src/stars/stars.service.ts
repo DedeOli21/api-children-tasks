@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import {
   User,
   UserRole,
@@ -16,6 +16,7 @@ import {
 } from '../entities';
 import { UpdateStarsDto } from './dto/update-stars.dto';
 import { SuggestStarsDto } from './dto/suggest-stars.dto';
+import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class StarsService {
@@ -26,6 +27,8 @@ export class StarsService {
     private historyRepository: Repository<HistoryEntry>,
     @InjectRepository(StarRequest)
     private starRequestRepository: Repository<StarRequest>,
+    private eventsService: EventsService,
+    private dataSource: DataSource,
   ) {}
 
   async getStars(userId: string) {
@@ -183,33 +186,61 @@ export class StarsService {
     return requests.map((request) => this.toPublicRequest(request));
   }
 
-  // Aprovação do responsável: único ponto que credita a bonificação
+  // Aprovação do responsável: único ponto que credita a bonificação.
+  // O Evento Surpresa vigente também multiplica bonificações aprovadas.
   async approveRequest(parent: User, requestId: string) {
-    const request = await this.getPendingRequestForParent(parent, requestId);
+    const { multiplier: eventMultiplier, event } =
+      await this.eventsService.activeMultiplier(parent.id);
 
-    request.status = StarRequestStatus.APPROVED;
-    request.approvedById = parent.id;
-    request.resolvedAt = new Date();
-    await this.starRequestRepository.save(request);
+    return this.dataSource.transaction(async (manager) => {
+      const request = await manager.findOne(StarRequest, {
+        where: { id: requestId },
+        relations: ['child', 'createdBy'],
+      });
+      if (!request) {
+        throw new NotFoundException('Bonificação não encontrada');
+      }
+      if (request.child?.parentId !== parent.id) {
+        throw new ForbiddenException('Essa bonificação não pertence à sua família');
+      }
+      if (request.status !== StarRequestStatus.PENDING) {
+        throw new BadRequestException('Esta bonificação já foi revisada');
+      }
 
-    const child = request.child;
-    child.currentStars += request.amount;
-    await this.userRepository.save(child);
+      const starsToAdd = request.amount * eventMultiplier;
 
-    await this.historyRepository.save(
-      this.historyRepository.create({
-        userId: child.id,
-        type: HistoryType.STARS_ADD,
-        description: `💜 Terapeuta ${request.createdBy?.name ?? ''}: ${request.reason}`.trim(),
-        starsChange: request.amount,
-      }),
-    );
+      request.status = StarRequestStatus.APPROVED;
+      request.approvedById = parent.id;
+      request.resolvedAt = new Date();
+      await manager.save(request);
 
-    return {
-      ...this.toPublicRequest(request),
-      currentStars: child.currentStars,
-      message: `Bonificação aprovada! +${request.amount} estrela(s) para ${child.name}`,
-    };
+      const child = request.child;
+      child.currentStars += starsToAdd;
+      await manager.save(child);
+
+      const therapistName = request.createdBy?.name
+        ? `Terapeuta ${request.createdBy.name}`
+        : 'Terapeuta';
+      await manager.save(
+        manager.create(HistoryEntry, {
+          userId: child.id,
+          type: HistoryType.STARS_ADD,
+          description: event
+            ? `${therapistName}: ${request.reason} (${event.emoji} ${event.name})`
+            : `${therapistName}: ${request.reason}`,
+          starsChange: starsToAdd,
+        }),
+      );
+
+      return {
+        ...this.toPublicRequest(request),
+        currentStars: child.currentStars,
+        baseAmount: request.amount,
+        starsEarned: starsToAdd,
+        eventMultiplier,
+        message: `Bonificação aprovada! +${starsToAdd} estrela(s) para ${child.name}`,
+      };
+    });
   }
 
   async rejectRequest(parent: User, requestId: string) {
@@ -246,4 +277,3 @@ export class StarsService {
     return request;
   }
 }
-

@@ -67,6 +67,81 @@ export class StreaksService {
     return 1;
   }
 
+  private getPlantState(user: User) {
+    const streak = user.currentStreak;
+    const withered = streak === 0 && Boolean(user.streakBrokenAt);
+
+    if (withered) {
+      return {
+        state: 'withered',
+        stage: 'withered',
+        emoji: '🥀',
+        label: 'Murcha',
+        streakBrokenAt: user.streakBrokenAt,
+        protectedByFreezes: user.streakFreezes > 0,
+        nextGrowthAt: 1,
+      };
+    }
+
+    if (streak >= 14) {
+      return {
+        state: 'healthy',
+        stage: 'blooming',
+        emoji: '🌻',
+        label: 'Florescendo',
+        streakBrokenAt: user.streakBrokenAt,
+        protectedByFreezes: user.streakFreezes > 0,
+        nextGrowthAt: null,
+      };
+    }
+
+    if (streak >= 6) {
+      return {
+        state: 'healthy',
+        stage: 'budding',
+        emoji: '🌷',
+        label: 'Com botões',
+        streakBrokenAt: user.streakBrokenAt,
+        protectedByFreezes: user.streakFreezes > 0,
+        nextGrowthAt: 14,
+      };
+    }
+
+    if (streak >= 2) {
+      return {
+        state: 'healthy',
+        stage: 'leafy',
+        emoji: '🌿',
+        label: 'Cheia de folhas',
+        streakBrokenAt: user.streakBrokenAt,
+        protectedByFreezes: user.streakFreezes > 0,
+        nextGrowthAt: 6,
+      };
+    }
+
+    if (streak === 1) {
+      return {
+        state: 'healthy',
+        stage: 'sprout',
+        emoji: '🌱',
+        label: 'Brotinho',
+        streakBrokenAt: user.streakBrokenAt,
+        protectedByFreezes: user.streakFreezes > 0,
+        nextGrowthAt: 2,
+      };
+    }
+
+    return {
+      state: user.streakFreezes > 0 ? 'protected' : 'seed',
+      stage: 'seed',
+      emoji: '🪴',
+      label: 'Semente',
+      streakBrokenAt: user.streakBrokenAt,
+      protectedByFreezes: user.streakFreezes > 0,
+      nextGrowthAt: 1,
+    };
+  }
+
   async hasCompletedAllTasks(userId: string, date: string): Promise<boolean> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     // Considera apenas as tarefas da família da criança
@@ -131,7 +206,16 @@ export class StreaksService {
         user.streakFreezes -= 1;
         user.lastStreakDate = cursor; // dia "congelado": não quebra nem incrementa
         freezesUsed += 1;
+        await this.historyRepository.save(
+          this.historyRepository.create({
+            userId: user.id,
+            type: HistoryType.STREAK_FREEZE_USED,
+            description: `Regador Mágico consumido automaticamente para proteger o streak em ${cursor}`,
+            starsChange: 0,
+          }),
+        );
       } else {
+        user.streakBrokenAt = cursor;
         user.currentStreak = 0;
         user.lastStreakDate = null;
         break;
@@ -166,9 +250,10 @@ export class StreaksService {
     // Penalidade hoje = reset imediato (regra disciplinar, freeze não protege)
     if (await this.hasReceivedPenalty(userId, today)) {
       const wasReset = user.currentStreak > 0;
-      if (wasReset) {
+      if (wasReset || user.lastStreakDate) {
         user.currentStreak = 0;
         user.lastStreakDate = null;
+        user.streakBrokenAt = today;
         await this.userRepository.save(user);
       }
       return { streak: 0, multiplier: 1, wasReset, freezesUsed };
@@ -218,9 +303,10 @@ export class StreaksService {
       throw new NotFoundException('Usuário não encontrado');
     }
 
-    if (user.currentStreak > 0) {
+    if (user.currentStreak > 0 || user.lastStreakDate) {
       user.currentStreak = 0;
       user.lastStreakDate = null;
+      user.streakBrokenAt = this.getTodayDate();
       await this.userRepository.save(user);
     }
   }
@@ -233,13 +319,17 @@ export class StreaksService {
     }
 
     const streakInfo = await this.updateStreak(userId);
+    const freshUser =
+      (await this.userRepository.findOne({ where: { id: userId } })) ?? user;
 
     return {
       currentStreak: streakInfo.streak,
       multiplier: streakInfo.multiplier,
-      longestStreak: Math.max(user.longestStreak, streakInfo.streak),
-      streakFreezes: user.streakFreezes,
-      lastStreakDate: user.lastStreakDate,
+      longestStreak: Math.max(freshUser.longestStreak, streakInfo.streak),
+      streakFreezes: freshUser.streakFreezes,
+      lastStreakDate: freshUser.lastStreakDate,
+      streakBrokenAt: freshUser.streakBrokenAt,
+      plant: this.getPlantState(freshUser),
       nextMultiplierThreshold: streakInfo.streak < 2 ? 2 : streakInfo.streak < 6 ? 6 : null,
     };
   }

@@ -39,6 +39,9 @@ export class Reward {
   @Column()
   emoji: string;
 
+  @Column({ type: 'text', nullable: true })
+  description: string | null;
+
   @Column({ default: 10 })
   cost: number;
 
@@ -51,4 +54,3 @@ export class Reward {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

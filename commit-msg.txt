@@ -1,0 +1,6 @@
+feat(gamificacao): cofrinho, modo foco, eventos surpresa e protecao de streak
+
+- Novos modulos: goals (cofrinho familiar), focus (pomodoro ludico), events (multiplicador de estrelas)
+- Streak freeze (Regador Magico) com planta da consistencia e cron diario
+- Creditos de estrelas transacionais com multiplicador streak x evento surpresa
+- Recompensa streak_freeze na loja e testes e2e da fase 2

@@ -20,6 +20,9 @@ import { RoutineTemplatesModule } from './routine-templates/routine-templates.mo
 import { TherapistsModule } from './therapists/therapists.module';
 import { ObservationsModule } from './observations/observations.module';
 import { MessagesModule } from './messages/messages.module';
+import { FocusModule } from './focus/focus.module';
+import { GoalsModule } from './goals/goals.module';
+import { EventsModule } from './events/events.module';
 import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -117,6 +120,9 @@ const shouldSynchronize =
     TherapistsModule,
     ObservationsModule,
     MessagesModule,
+    FocusModule,
+    GoalsModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Reward, User, HistoryEntry, HistoryType } from '../entities';
+import { DataSource, Repository } from 'typeorm';
+import { Reward, RewardKind, User, HistoryEntry, HistoryType } from '../entities';
 import { CreateRewardDto } from './dto/create-reward.dto';
 import { UpdateRewardDto } from './dto/update-reward.dto';
 
@@ -14,6 +14,7 @@ export class RewardsService {
     private userRepository: Repository<User>,
     @InjectRepository(HistoryEntry)
     private historyRepository: Repository<HistoryEntry>,
+    private dataSource: DataSource,
   ) {}
 
   async findAll(familyId: string) {
@@ -27,6 +28,8 @@ export class RewardsService {
     const reward = this.rewardRepository.create({
       ...createRewardDto,
       familyId,
+      kind: createRewardDto.kind ?? RewardKind.PRIVILEGE,
+      description: createRewardDto.description ?? null,
     });
     return this.rewardRepository.save(reward);
   }
@@ -57,47 +60,61 @@ export class RewardsService {
     return { message: 'Recompensa removida com sucesso' };
   }
 
+  /**
+   * Resgate transacional: débito das estrelas, efeito do item e histórico
+   * acontecem juntos ou não acontecem. Itens do tipo streak_freeze
+   * ("Regador Mágico") creditam +1 congelamento em vez de um privilégio.
+   */
   async redeemReward(userId: string, rewardId: string, familyId: string) {
-    const reward = await this.rewardRepository.findOne({
-      where: { id: rewardId, familyId },
-    });
+    return this.dataSource.transaction(async (manager) => {
+      const reward = await manager.findOne(Reward, {
+        where: { id: rewardId, familyId, active: true },
+      });
 
-    if (!reward) {
-      throw new NotFoundException('Recompensa não encontrada');
-    }
+      if (!reward) {
+        throw new NotFoundException('Recompensa não encontrada');
+      }
 
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-    });
+      const user = await manager.findOne(User, { where: { id: userId } });
 
-    if (!user) {
-      throw new NotFoundException('Usuário não encontrado');
-    }
+      if (!user) {
+        throw new NotFoundException('Usuário não encontrado');
+      }
 
-    if (user.currentStars < reward.cost) {
-      throw new BadRequestException(
-        `Estrelas insuficientes. Você tem ${user.currentStars} estrelas, mas precisa de ${reward.cost}.`,
+      if (user.currentStars < reward.cost) {
+        throw new BadRequestException(
+          `Estrelas insuficientes. Você tem ${user.currentStars} estrelas, mas precisa de ${reward.cost}.`,
+        );
+      }
+
+      user.currentStars -= reward.cost;
+
+      const isFreeze = reward.kind === RewardKind.STREAK_FREEZE;
+      if (isFreeze) {
+        user.streakFreezes += 1;
+      }
+      await manager.save(user);
+
+      await manager.save(
+        manager.create(HistoryEntry, {
+          userId,
+          type: HistoryType.REWARD_REDEEM,
+          description: isFreeze
+            ? `Comprou ${reward.title} (${reward.emoji}): +1 proteção da plantinha`
+            : `Resgatou recompensa: ${reward.title} (${reward.emoji})`,
+          starsChange: -reward.cost,
+        }),
       );
-    }
 
-    user.currentStars -= reward.cost;
-    await this.userRepository.save(user);
-
-    // Registrar no histórico
-    const historyEntry = this.historyRepository.create({
-      userId,
-      type: HistoryType.REWARD_REDEEM,
-      description: `Resgatou recompensa: ${reward.title} (${reward.emoji})`,
-      starsChange: -reward.cost,
+      return {
+        reward,
+        starsSpent: reward.cost,
+        currentStars: user.currentStars,
+        streakFreezes: user.streakFreezes,
+        message: isFreeze
+          ? `${reward.emoji} "${reward.title}" guardado! Sua plantinha está protegida (${user.streakFreezes} no total)`
+          : `Recompensa "${reward.title}" resgatada! -${reward.cost} estrelas`,
+      };
     });
-    await this.historyRepository.save(historyEntry);
-
-    return {
-      reward,
-      starsSpent: reward.cost,
-      currentStars: user.currentStars,
-      message: `Recompensa "${reward.title}" resgatada! -${reward.cost} estrelas`,
-    };
   }
 }
-

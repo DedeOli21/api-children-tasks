@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import {
   Mission,
   MissionStatus,
@@ -15,6 +15,7 @@ import {
   HistoryType,
 } from '../entities';
 import { AccessControlService } from '../auth/access-control.service';
+import { EventsService } from '../events/events.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { AllocateMissionDto } from './dto/allocate-mission.dto';
 
@@ -28,6 +29,8 @@ export class MissionsService {
     @InjectRepository(HistoryEntry)
     private historyRepository: Repository<HistoryEntry>,
     private accessControl: AccessControlService,
+    private eventsService: EventsService,
+    private dataSource: DataSource,
   ) {}
 
   private toPublic(mission: Mission) {
@@ -160,7 +163,9 @@ export class MissionsService {
     return missions.map((mission) => this.toPublic(mission));
   }
 
-  // Aprova e credita as estrelas — único ponto que recompensa a missão
+  // Aprova e credita as estrelas — único ponto que recompensa a missão.
+  // Status + crédito + histórico na mesma transação; Evento Surpresa
+  // vigente multiplica a recompensa.
   async approve(parent: User, missionId: string) {
     const mission = await this.getMissionForParent(parent, missionId);
 
@@ -168,33 +173,45 @@ export class MissionsService {
       throw new BadRequestException('A missão ainda não foi concluída pela criança');
     }
 
-    mission.status = MissionStatus.APPROVED;
-    mission.approvedAt = new Date();
-    await this.missionRepository.save(mission);
-
-    const child = await this.userRepository.findOne({
-      where: { id: mission.assignedToId },
-    });
-    if (!child) {
-      throw new NotFoundException('Criança não encontrada');
-    }
-    child.currentStars += mission.starsReward;
-    await this.userRepository.save(child);
-
+    const { multiplier: eventMultiplier, event } =
+      await this.eventsService.activeMultiplier(parent.id);
+    const starsToAdd = mission.starsReward * eventMultiplier;
     const teacherName = mission.createdBy?.name ?? 'Professor(a)';
-    await this.historyRepository.save(
-      this.historyRepository.create({
-        userId: child.id,
-        type: HistoryType.TASK_COMPLETE,
-        description: `Missão aprovada: ${mission.title} (${teacherName})`,
-        starsChange: mission.starsReward,
-      }),
-    );
+
+    const currentStars = await this.dataSource.transaction(async (manager) => {
+      mission.status = MissionStatus.APPROVED;
+      mission.approvedAt = new Date();
+      await manager.save(mission);
+
+      const child = await manager.findOne(User, {
+        where: { id: mission.assignedToId },
+      });
+      if (!child) {
+        throw new NotFoundException('Criança não encontrada');
+      }
+      child.currentStars += starsToAdd;
+      await manager.save(child);
+
+      await manager.save(
+        manager.create(HistoryEntry, {
+          userId: child.id,
+          type: HistoryType.TASK_COMPLETE,
+          description: event
+            ? `Missão aprovada: ${mission.title} (${teacherName}) ${event.emoji} ${event.name}`
+            : `Missão aprovada: ${mission.title} (${teacherName})`,
+          starsChange: starsToAdd,
+        }),
+      );
+
+      return child.currentStars;
+    });
 
     return {
       ...this.toPublic(mission),
-      currentStars: child.currentStars,
-      message: `Missão "${mission.title}" aprovada! +${mission.starsReward} estrela(s)`,
+      currentStars,
+      starsEarned: starsToAdd,
+      eventMultiplier,
+      message: `Missão "${mission.title}" aprovada! +${starsToAdd} estrela(s)`,
     };
   }
 

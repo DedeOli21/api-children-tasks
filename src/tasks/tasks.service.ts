@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   Task,
   DailyLog,
@@ -19,6 +19,7 @@ import {
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { StreaksService } from '../streaks/streaks.service';
+import { EventsService } from '../events/events.service';
 
 @Injectable()
 export class TasksService {
@@ -33,6 +34,8 @@ export class TasksService {
     private historyRepository: Repository<HistoryEntry>,
     @Inject(forwardRef(() => StreaksService))
     private streaksService: StreaksService,
+    private eventsService: EventsService,
+    private dataSource: DataSource,
   ) {}
 
   private getTodayDate(): string {
@@ -196,32 +199,44 @@ export class TasksService {
       throw new BadRequestException('A criança ainda não marcou esta tarefa como feita');
     }
 
-    log.status = TaskExecutionStatus.APPROVED;
-    log.approvedAt = new Date();
-    log.approvedById = parentId;
-    await this.dailyLogRepository.save(log);
-
+    // Multiplicadores: streak da criança × Evento Surpresa vigente
     const child = log.user;
-    const multiplier = this.streaksService.getStreakMultiplier(
+    const streakMultiplier = this.streaksService.getStreakMultiplier(
       child.currentStreak,
     );
-    const starsToAdd = 1 * multiplier;
-
-    child.currentStars += starsToAdd;
-    await this.userRepository.save(child);
-
+    const { multiplier: eventMultiplier, event } =
+      await this.eventsService.activeMultiplier(parentId);
+    const starsToAdd = 1 * streakMultiplier * eventMultiplier;
     const taskTitle = log.task?.title ?? 'Tarefa';
-    await this.historyRepository.save(
-      this.historyRepository.create({
-        userId: child.id,
-        type: HistoryType.TASK_COMPLETE,
-        description:
-          multiplier > 1
-            ? `Tarefa aprovada: ${taskTitle} (${multiplier}x streak!)`
+
+    // Mudança de status, crédito e histórico na mesma transação:
+    // ou a criança recebe tudo, ou nada muda.
+    await this.dataSource.transaction(async (manager) => {
+      log.status = TaskExecutionStatus.APPROVED;
+      log.approvedAt = new Date();
+      log.approvedById = parentId;
+      await manager.save(log);
+
+      child.currentStars += starsToAdd;
+      await manager.save(child);
+
+      const bonuses = [
+        streakMultiplier > 1 ? `${streakMultiplier}x streak` : null,
+        event ? `${event.emoji} ${event.name}` : null,
+      ]
+        .filter(Boolean)
+        .join(' + ');
+      await manager.save(
+        manager.create(HistoryEntry, {
+          userId: child.id,
+          type: HistoryType.TASK_COMPLETE,
+          description: bonuses
+            ? `Tarefa aprovada: ${taskTitle} (${bonuses})`
             : `Tarefa aprovada: ${taskTitle}`,
-        starsChange: starsToAdd,
-      }),
-    );
+          starsChange: starsToAdd,
+        }),
+      );
+    });
 
     return {
       logId: log.id,
@@ -230,7 +245,8 @@ export class TasksService {
       childId: child.id,
       currentStars: child.currentStars,
       starsEarned: starsToAdd,
-      multiplier,
+      multiplier: streakMultiplier,
+      eventMultiplier,
       message: `Tarefa "${taskTitle}" aprovada! +${starsToAdd} estrela(s) para ${child.name}`,
     };
   }

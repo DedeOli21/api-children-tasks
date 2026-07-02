@@ -8,6 +8,7 @@ import {
   DailyLog,
   Penalty,
   Reward,
+  RewardKind,
   HistoryEntry,
   Routine,
   RoutineLog,
@@ -216,6 +217,13 @@ async function seed() {
       { title: 'Brinquedo pequeno', emoji: '🎁', cost: 50 },
       { title: 'Dormir mais tarde', emoji: '🌙', cost: 15 },
       { title: 'Escolher o jantar', emoji: '🍕', cost: 12 },
+      {
+        title: 'Regador Mágico',
+        emoji: '💧',
+        description: 'Protege a Planta da Consistência em um dia ruim',
+        cost: 12,
+        kind: RewardKind.STREAK_FREEZE,
+      },
     ];
 
     for (const reward of rewards) {
@@ -224,6 +232,23 @@ async function seed() {
     console.log(`✅ ${rewards.length} recompensas criadas`);
   } else {
     console.log(`⏭️ Recompensas já existem (${existingRewards})`);
+  }
+
+  const existingMagicWateringCan = await rewardRepository.findOne({
+    where: { familyId, title: 'Regador Mágico' },
+  });
+  if (!existingMagicWateringCan) {
+    await rewardRepository.save(
+      rewardRepository.create({
+        familyId,
+        title: 'Regador Mágico',
+        emoji: '💧',
+        description: 'Protege a Planta da Consistência em um dia ruim',
+        cost: 12,
+        kind: RewardKind.STREAK_FREEZE,
+      }),
+    );
+    console.log('✅ Regador Mágico criado na loja');
   }
 
   // Seed de Prêmios da Caixa Surpresa
