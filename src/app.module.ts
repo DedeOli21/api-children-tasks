@@ -42,6 +42,10 @@ import {
   StarRequest,
   Observation,
   Message,
+  FocusSession,
+  FamilyGoal,
+  GoalDeposit,
+  RewardEvent,
 } from './entities';
 
 const entities = [
@@ -63,6 +67,10 @@ const entities = [
   StarRequest,
   Observation,
   Message,
+  FocusSession,
+  FamilyGoal,
+  GoalDeposit,
+  RewardEvent,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma

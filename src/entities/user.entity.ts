@@ -74,6 +74,11 @@ export class User {
   @Column({ name: 'streak_freezes', default: 0 })
   streakFreezes: number;
 
+  // Última vez que o streak quebrou — a Planta da Consistência usa isso
+  // para exibir o estado "murcha" logo após a perda da sequência
+  @Column({ name: 'streak_broken_at', type: 'date', nullable: true })
+  streakBrokenAt: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

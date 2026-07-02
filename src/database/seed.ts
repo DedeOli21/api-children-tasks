@@ -22,6 +22,10 @@ import {
   StarRequest,
   Observation,
   Message,
+  FocusSession,
+  FamilyGoal,
+  GoalDeposit,
+  RewardEvent,
 } from '../entities';
 import { generateInviteCode } from '../children/invite-code.util';
 
@@ -44,6 +48,10 @@ const entities = [
   StarRequest,
   Observation,
   Message,
+  FocusSession,
+  FamilyGoal,
+  GoalDeposit,
+  RewardEvent,
 ];
 
 const dataSource = new DataSource(

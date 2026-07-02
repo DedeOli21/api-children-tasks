@@ -22,4 +22,11 @@ export { StarRequestStatus } from './star-request.entity';
 export * from './observation.entity';
 export { ObservationType } from './observation.entity';
 export * from './message.entity';
+export { RewardKind } from './reward.entity';
+export * from './focus-session.entity';
+export { FocusSessionStatus } from './focus-session.entity';
+export * from './family-goal.entity';
+export { FamilyGoalStatus } from './family-goal.entity';
+export * from './goal-deposit.entity';
+export * from './reward-event.entity';
 
