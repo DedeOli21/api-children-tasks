@@ -27,6 +27,10 @@ import {
   FamilyGoal,
   GoalDeposit,
   RewardEvent,
+  ShopItem,
+  ShopItemType,
+  VirtualPet,
+  InventoryItem,
 } from '../entities';
 import { generateInviteCode } from '../children/invite-code.util';
 
@@ -53,6 +57,9 @@ const entities = [
   FamilyGoal,
   GoalDeposit,
   RewardEvent,
+  ShopItem,
+  VirtualPet,
+  InventoryItem,
 ];
 
 const dataSource = new DataSource(
@@ -327,6 +334,37 @@ async function seed() {
     console.log(`✅ ${routines.length} rotinas criadas`);
   } else if (existingRoutines > 0) {
     console.log(`⏭️ Rotinas já existem (${existingRoutines})`);
+  }
+
+  // Catálogo padrão da Loja Botânica (familyId null = todas as famílias)
+  const shopItemRepository = dataSource.getRepository(ShopItem);
+  const existingShopItems = await shopItemRepository.count();
+
+  if (existingShopItems === 0) {
+    const shopItems = [
+      // Consumíveis de sobrevivência
+      { type: ShopItemType.WATER, name: 'Gota de Água', emoji: '💧', price: 2, restoreAmount: 30, description: 'Mata a sede da plantinha' },
+      { type: ShopItemType.WATER, name: 'Regador Cheio', emoji: '🚿', price: 5, restoreAmount: 100, description: 'Rega completa!' },
+      { type: ShopItemType.FOOD, name: 'Adubo', emoji: '🌰', price: 3, restoreAmount: 30, description: 'Um lanchinho nutritivo' },
+      { type: ShopItemType.FOOD, name: 'Superadubo', emoji: '🍯', price: 7, restoreAmount: 100, description: 'Banquete da plantinha!' },
+      // Espécies
+      { type: ShopItemType.SKIN, name: 'Cacto', emoji: '🌵', price: 15, description: 'Espinhoso e valente' },
+      { type: ShopItemType.SKIN, name: 'Girassol', emoji: '🌻', price: 15, description: 'Sempre olhando o sol' },
+      { type: ShopItemType.SKIN, name: 'Planta Carnívora', emoji: '🪴', price: 25, description: 'Nham nham!' },
+      // Cenários
+      { type: ShopItemType.BACKGROUND, name: 'Quarto Aconchegante', emoji: '🛏️', price: 10, description: 'Fundo de quarto' },
+      { type: ShopItemType.BACKGROUND, name: 'Jardim Florido', emoji: '🏡', price: 10, description: 'Fundo de jardim' },
+      { type: ShopItemType.BACKGROUND, name: 'Espaço Sideral', emoji: '🌌', price: 20, description: 'Uma planta astronauta!' },
+      // Efeitos
+      { type: ShopItemType.EFFECT, name: 'Máquina de Bolhas', emoji: '🫧', price: 30, description: 'Bolhas de sabão animadas' },
+      { type: ShopItemType.EFFECT, name: 'Vagalumes', emoji: '✨', price: 30, description: 'Luzinhas dançantes' },
+    ];
+    for (const item of shopItems) {
+      await shopItemRepository.save(shopItemRepository.create({ ...item, familyId: null }));
+    }
+    console.log(`✅ ${shopItems.length} itens do catálogo padrão da Loja Botânica criados`);
+  } else {
+    console.log(`⏭️ Itens da loja já existem (${existingShopItems})`);
   }
 
   console.log('\n✨ Seed concluído!\n');

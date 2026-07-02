@@ -49,6 +49,9 @@ import {
   FamilyGoal,
   GoalDeposit,
   RewardEvent,
+  ShopItem,
+  VirtualPet,
+  InventoryItem,
 } from './entities';
 
 const entities = [
@@ -74,6 +77,9 @@ const entities = [
   FamilyGoal,
   GoalDeposit,
   RewardEvent,
+  ShopItem,
+  VirtualPet,
+  InventoryItem,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma

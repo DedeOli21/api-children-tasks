@@ -29,4 +29,8 @@ export * from './family-goal.entity';
 export { FamilyGoalStatus } from './family-goal.entity';
 export * from './goal-deposit.entity';
 export * from './reward-event.entity';
+export * from './shop-item.entity';
+export { ShopItemType } from './shop-item.entity';
+export * from './virtual-pet.entity';
+export * from './inventory-item.entity';
 
