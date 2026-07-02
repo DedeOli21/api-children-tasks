@@ -191,20 +191,15 @@ export class TasksService {
   async resetTasks(userId: string) {
     const today = this.getTodayDate();
 
-    // Buscar todos os logs de hoje
-    const todayLogs = await this.dailyLogRepository.find({
-      where: { userId, date: today },
-    });
-
-    // Resetar todos
-    for (const log of todayLogs) {
-      log.completed = false;
-      await this.dailyLogRepository.save(log);
-    }
+    // Um único UPDATE em vez de N saves em loop
+    const result = await this.dailyLogRepository.update(
+      { userId, date: today, completed: true },
+      { completed: false },
+    );
 
     return {
       message: 'Todas as tarefas foram resetadas para hoje',
-      resetCount: todayLogs.length,
+      resetCount: result.affected ?? 0,
     };
   }
 }

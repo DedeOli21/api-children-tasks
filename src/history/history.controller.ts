@@ -18,10 +18,12 @@ export class HistoryController {
     @Query('childId') childId?: string,
   ) {
     const child = await this.accessControl.resolveChild(user, childId);
-    return this.historyService.findAll(
-      child.id,
-      limit ? parseInt(limit) : undefined,
-    );
+    // Clamp: valores inválidos (NaN, negativos) não chegam ao TypeORM
+    const parsed = limit ? parseInt(limit, 10) : NaN;
+    const safeLimit = Number.isFinite(parsed)
+      ? Math.min(Math.max(parsed, 1), 200)
+      : undefined;
+    return this.historyService.findAll(child.id, safeLimit);
   }
 
   @Get('range')

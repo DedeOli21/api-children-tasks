@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { StarsModule } from './stars/stars.module';
@@ -44,6 +45,11 @@ const entities = [
   BehaviorReport,
 ];
 
+// Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma
+// sincronização controlada (ex.: primeiro deploy com novas tabelas/colunas).
+const shouldSynchronize =
+  process.env.NODE_ENV !== 'production' || process.env.DB_SYNC === 'true';
+
 @Module({
   imports: [
     TypeOrmModule.forRoot(
@@ -52,17 +58,19 @@ const entities = [
             type: 'postgres',
             url: process.env.DATABASE_URL,
             entities,
-            synchronize: process.env.NODE_ENV !== 'production',
+            synchronize: shouldSynchronize,
             ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
           }
         : {
             type: 'better-sqlite3',
             database: process.env.DATABASE_PATH || 'database.sqlite',
             entities,
-            synchronize: process.env.NODE_ENV !== 'production',
+            synchronize: shouldSynchronize,
           },
     ),
     TypeOrmModule.forFeature(entities),
+    // Limite global generoso; login/register têm limites mais duros via @Throttle
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     AuthModule,
     StarsModule,
     TasksModule,
@@ -78,6 +86,10 @@ const entities = [
   controllers: [AppController],
   providers: [
     LegacyMigrationService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
