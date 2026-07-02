@@ -34,6 +34,10 @@ import {
   Mission,
   RoutineTemplate,
   RoutineTemplateTask,
+  TherapistChild,
+  StarRequest,
+  Observation,
+  Message,
 } from './entities';
 
 const entities = [
@@ -51,6 +55,10 @@ const entities = [
   Mission,
   RoutineTemplate,
   RoutineTemplateTask,
+  TherapistChild,
+  StarRequest,
+  Observation,
+  Message,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma

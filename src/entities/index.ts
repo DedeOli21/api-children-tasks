@@ -16,4 +16,10 @@ export { MissionStatus } from './mission.entity';
 export * from './routine-template.entity';
 export * from './routine-template-task.entity';
 export { TaskExecutionStatus } from './daily-log.entity';
+export * from './therapist-child.entity';
+export * from './star-request.entity';
+export { StarRequestStatus } from './star-request.entity';
+export * from './observation.entity';
+export { ObservationType } from './observation.entity';
+export * from './message.entity';
 

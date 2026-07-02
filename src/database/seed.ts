@@ -18,6 +18,10 @@ import {
   Mission,
   RoutineTemplate,
   RoutineTemplateTask,
+  TherapistChild,
+  StarRequest,
+  Observation,
+  Message,
 } from '../entities';
 import { generateInviteCode } from '../children/invite-code.util';
 
@@ -36,6 +40,10 @@ const entities = [
   Mission,
   RoutineTemplate,
   RoutineTemplateTask,
+  TherapistChild,
+  StarRequest,
+  Observation,
+  Message,
 ];
 
 const dataSource = new DataSource(

@@ -15,6 +15,7 @@ export enum UserRole {
   PARENT = 'parent',
   CHILD = 'child',
   TEACHER = 'teacher',
+  THERAPIST = 'therapist',
 }
 
 @Entity('users')
@@ -64,6 +65,14 @@ export class User {
 
   @Column({ name: 'last_streak_date', type: 'date', nullable: true })
   lastStreakDate: string | null;
+
+  // Maior sequência já alcançada (troféu de gamificação)
+  @Column({ name: 'longest_streak', default: 0 })
+  longestStreak: number;
+
+  // Inventário de "congelamentos": protegem o streak em um dia ruim
+  @Column({ name: 'streak_freezes', default: 0 })
+  streakFreezes: number;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
