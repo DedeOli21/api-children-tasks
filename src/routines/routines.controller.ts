@@ -16,7 +16,9 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AccessControlService } from '../auth/access-control.service';
 import { User, UserRole } from '../entities';
 
+// Escopo de gamificação: apenas responsável e a própria criança (ver TasksController).
 @Controller('routines')
+@Roles(UserRole.PARENT, UserRole.CHILD)
 export class RoutinesController {
   constructor(
     private readonly routinesService: RoutinesService,

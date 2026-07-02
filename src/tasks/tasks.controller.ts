@@ -16,7 +16,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AccessControlService } from '../auth/access-control.service';
 import { User, UserRole } from '../entities';
 
+// Escopo de gamificação: apenas responsável e a própria criança.
+// Professor não deve completar/resetar tarefas do aluno — seu acesso
+// se limita a /teacher/students/:id/stars e /reports.
 @Controller('tasks')
+@Roles(UserRole.PARENT, UserRole.CHILD)
 export class TasksController {
   constructor(
     private readonly tasksService: TasksService,

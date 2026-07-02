@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { AccessControlService } from './access-control.service';
+import { getJwtSecret } from '../config/jwt.config';
 import { User, TeacherStudent } from '../entities';
 
 @Module({
@@ -13,7 +14,7 @@ import { User, TeacherStudent } from '../entities';
     TypeOrmModule.forFeature([User, TeacherStudent]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key-change-in-production',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '7d' },
     }),
   ],

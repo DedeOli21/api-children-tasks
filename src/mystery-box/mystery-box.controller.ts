@@ -16,7 +16,9 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AccessControlService } from '../auth/access-control.service';
 import { User, UserRole } from '../entities';
 
+// Escopo de gamificação: apenas responsável e a própria criança (ver TasksController).
 @Controller('mystery-box')
+@Roles(UserRole.PARENT, UserRole.CHILD)
 export class MysteryBoxController {
   constructor(
     private readonly mysteryBoxService: MysteryBoxService,

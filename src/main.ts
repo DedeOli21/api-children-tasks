@@ -10,10 +10,18 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   
   // Habilitar CORS
+  // Em produção exige lista explícita de origens: refletir qualquer origem
+  // (origin: true) com credentials: true equivaleria a desabilitar a
+  // proteção de CORS para todos os endpoints autenticados.
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGINS) {
+    throw new Error(
+      'ALLOWED_ORIGINS não configurado. Defina os domínios do frontend antes de iniciar em produção.',
+    );
+  }
   const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
+    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
     : true; // Em desenvolvimento, permite todas as origens
-  
+
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
