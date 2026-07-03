@@ -14,6 +14,8 @@ import {
   StarRequest,
   StarRequestStatus,
 } from '../entities';
+import { NotificationType } from '../entities';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateStarsDto } from './dto/update-stars.dto';
 import { SuggestStarsDto } from './dto/suggest-stars.dto';
 import { EventsService } from '../events/events.service';
@@ -27,6 +29,7 @@ export class StarsService {
     private historyRepository: Repository<HistoryEntry>,
     @InjectRepository(StarRequest)
     private starRequestRepository: Repository<StarRequest>,
+    private notificationsService: NotificationsService,
     private eventsService: EventsService,
     private dataSource: DataSource,
   ) {}
@@ -137,6 +140,15 @@ export class StarsService {
         status: StarRequestStatus.PENDING,
       }),
     );
+
+    if (child.parentId) {
+      await this.notificationsService.notify(
+        child.parentId,
+        NotificationType.APPROVAL_PENDING,
+        '💜 Estrelas da terapeuta aguardando aprovação!',
+        `${therapist.name} sugeriu +${request.amount} estrela(s) para ${child.name}: "${request.reason}"`,
+      );
+    }
 
     return {
       id: request.id,

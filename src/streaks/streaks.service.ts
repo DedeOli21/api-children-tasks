@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Not, IsNull, Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import {
   User,
@@ -10,7 +10,11 @@ import {
   HistoryEntry,
   HistoryType,
   TaskExecutionStatus,
+  VirtualPet,
+  NotificationType,
 } from '../entities';
+import { NotificationsService } from '../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Motor de streaks:
@@ -35,6 +39,9 @@ export class StreaksService {
     private taskRepository: Repository<Task>,
     @InjectRepository(HistoryEntry)
     private historyRepository: Repository<HistoryEntry>,
+    private notificationsService: NotificationsService,
+    private settingsService: SettingsService,
+    private dataSource: DataSource,
   ) {}
 
   private toDateString(date: Date): string {
@@ -185,16 +192,22 @@ export class StreaksService {
    * Preenche a lacuna entre o último dia contado e ontem:
    * - dia completo → streak continua (e incrementa, cobrindo contagem retroativa);
    * - dia incompleto com freeze no inventário → consome 1 e preserva o streak;
-   * - dia incompleto sem freeze → quebra a sequência.
+   * - dia incompleto sem freeze → PUNIÇÃO TRIPLA numa única transação:
+   *   streak zerado + estrelas deduzidas (FamilySettings) + planta doente,
+   *   com histórico e notificações para criança e responsável.
+   * A dedução acontece no máximo uma vez por avaliação — quem ficou uma
+   * semana sem abrir o app não perde 7x (o cron diário cobre o caso normal).
    * Retorna quantos freezes foram consumidos (para feedback).
    */
   private async evaluatePendingDays(user: User): Promise<number> {
     const today = this.getTodayDate();
     const yesterday = this.previousDay(today);
-    let freezesUsed = 0;
 
     if (!user.lastStreakDate || user.currentStreak === 0) return 0;
     if (user.lastStreakDate >= yesterday) return 0; // nada pendente
+
+    const frozenDays: string[] = [];
+    let brokenOn: string | null = null;
 
     let cursor = this.nextDay(user.lastStreakDate);
     while (cursor <= yesterday) {
@@ -205,16 +218,9 @@ export class StreaksService {
       } else if (user.streakFreezes > 0) {
         user.streakFreezes -= 1;
         user.lastStreakDate = cursor; // dia "congelado": não quebra nem incrementa
-        freezesUsed += 1;
-        await this.historyRepository.save(
-          this.historyRepository.create({
-            userId: user.id,
-            type: HistoryType.STREAK_FREEZE_USED,
-            description: `Regador Mágico consumido automaticamente para proteger o streak em ${cursor}`,
-            starsChange: 0,
-          }),
-        );
+        frozenDays.push(cursor);
       } else {
+        brokenOn = cursor;
         user.streakBrokenAt = cursor;
         user.currentStreak = 0;
         user.lastStreakDate = null;
@@ -226,8 +232,91 @@ export class StreaksService {
     if (user.currentStreak > user.longestStreak) {
       user.longestStreak = user.currentStreak;
     }
-    await this.userRepository.save(user);
-    return freezesUsed;
+
+    await this.dataSource.transaction(async (manager) => {
+      // Escudos consumidos: registro + aviso à criança (1 por dia protegido)
+      for (const day of frozenDays) {
+        await manager.save(
+          manager.create(HistoryEntry, {
+            userId: user.id,
+            type: HistoryType.STREAK_FREEZE_USED,
+            description: `Regador Mágico consumido automaticamente para proteger o streak em ${day}`,
+            starsChange: 0,
+          }),
+        );
+        await this.notificationsService.notifyWith(
+          manager,
+          user.id,
+          NotificationType.GENERAL,
+          '🛡️ Seu Regador Mágico te salvou!',
+          'Ontem ficou corrido, mas sua sequência e sua plantinha estão protegidas.',
+          `freeze:${user.id}:${day}`,
+        );
+      }
+
+      if (brokenOn) {
+        // 2ª punição: dedução de estrelas conforme configuração da família
+        const settings = await this.settingsService.getWith(
+          manager,
+          user.parentId ?? '',
+        );
+        let deducted = 0;
+        if (settings.applyDailyPenalty && user.currentStars > 0) {
+          deducted = Math.min(settings.dailyPenaltyStars, user.currentStars);
+          user.currentStars -= deducted;
+          await manager.save(
+            manager.create(HistoryEntry, {
+              userId: user.id,
+              type: HistoryType.DAILY_PENALTY,
+              description: `Dia ${brokenOn} incompleto: sequência quebrada`,
+              starsChange: -deducted,
+            }),
+          );
+        }
+
+        // 3ª punição: a planta adoece até um dia fechar completo de novo
+        const pet = await manager.findOne(VirtualPet, {
+          where: { childId: user.id },
+        });
+        if (pet && !pet.sickSince) {
+          pet.sickSince = brokenOn;
+          await manager.save(pet);
+        }
+
+        await this.notificationsService.notifyWith(
+          manager,
+          user.id,
+          NotificationType.PET_SICK,
+          '😢 Sua plantinha ficou doente...',
+          'As tarefas de ontem não foram concluídas. Complete os combinados de hoje para curá-la!',
+          `pet_sick:${user.id}:${brokenOn}`,
+        );
+        if (user.parentId) {
+          await this.notificationsService.notifyWith(
+            manager,
+            user.parentId,
+            NotificationType.DAILY_PENALTY,
+            `A sequência de ${user.name} quebrou`,
+            deducted > 0
+              ? `Dia incompleto sem proteção: streak zerado e -${deducted} estrela(s).`
+              : 'Dia incompleto sem proteção: streak zerado.',
+            `daily_penalty:${user.id}:${brokenOn}`,
+          );
+        }
+      }
+
+      // Persiste streak/freezes/saldo juntos — tudo ou nada
+      await manager.save(user);
+    });
+
+    return frozenDays.length;
+  }
+
+  // Cura a planta quando a criança volta a fechar um dia completo
+  private async curePet(childId: string): Promise<void> {
+    await this.dataSource
+      .getRepository(VirtualPet)
+      .update({ childId, sickSince: Not(IsNull()) }, { sickSince: null });
   }
 
   /**
@@ -286,6 +375,9 @@ export class StreaksService {
       user.longestStreak = user.currentStreak;
     }
     await this.userRepository.save(user);
+
+    // Dia completo cura a planta doente (penalidade orgânica revertida)
+    await this.curePet(userId);
 
     return {
       streak: user.currentStreak,

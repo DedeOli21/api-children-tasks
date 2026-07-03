@@ -14,7 +14,9 @@ import {
   HistoryEntry,
   HistoryType,
 } from '../entities';
+import { NotificationType } from '../entities';
 import { AccessControlService } from '../auth/access-control.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { EventsService } from '../events/events.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { AllocateMissionDto } from './dto/allocate-mission.dto';
@@ -29,6 +31,7 @@ export class MissionsService {
     @InjectRepository(HistoryEntry)
     private historyRepository: Repository<HistoryEntry>,
     private accessControl: AccessControlService,
+    private notificationsService: NotificationsService,
     private eventsService: EventsService,
     private dataSource: DataSource,
   ) {}
@@ -71,6 +74,24 @@ export class MissionsService {
       );
     }
     const saved = await this.missionRepository.save(missions);
+
+    // Avisa cada responsável (dedupe: 1 aviso por professor/dia por família)
+    const today = new Date().toISOString().split('T')[0];
+    const parentIds = new Set<string>();
+    for (const childId of dto.childIds) {
+      const child = await this.userRepository.findOne({ where: { id: childId } });
+      if (child?.parentId) parentIds.add(child.parentId);
+    }
+    for (const parentId of parentIds) {
+      await this.notificationsService.notify(
+        parentId,
+        NotificationType.APPROVAL_PENDING,
+        '🚀 Nova missão da escola na sua inbox!',
+        `${teacher.name} enviou "${dto.title}" — aloque em um dia da semana.`,
+        `mission-inbox:${teacher.id}:${parentId}:${today}`,
+      );
+    }
+
     return saved.map((mission) => ({
       id: mission.id,
       title: mission.title,

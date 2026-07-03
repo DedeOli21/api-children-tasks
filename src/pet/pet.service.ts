@@ -14,6 +14,8 @@ import {
   HistoryEntry,
   HistoryType,
 } from '../entities';
+import { NotificationType } from '../entities';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateShopItemDto, UpdateShopItemDto } from './dto/create-shop-item.dto';
 
 // Queda de nível por hora sem cuidado (~1 dia e meio até zerar de 100)
@@ -34,6 +36,7 @@ export class PetService {
     @InjectRepository(InventoryItem)
     private inventoryRepository: Repository<InventoryItem>,
     private dataSource: DataSource,
+    private notificationsService: NotificationsService,
   ) {}
 
   // ============ ESTADO DERIVADO ============
@@ -125,6 +128,20 @@ export class PetService {
     if (this.applyDecay(pet)) {
       await this.petRepository.save(pet);
     }
+
+    // Notificação inteligente: sede/fome avisada no máximo 1x por dia
+    const mood = this.moodOf(pet);
+    if (mood === 'thirsty' || mood === 'hungry' || mood === 'sad') {
+      const today = new Date().toISOString().split('T')[0];
+      await this.notificationsService.notify(
+        child.id,
+        NotificationType.PET_THIRSTY,
+        mood === 'thirsty' ? '💧 Sua planta está com sede!' : '🌰 Sua planta está com fome!',
+        `${pet.name} precisa de você. Visite a Loja Botânica!`,
+        `pet_needs:${child.id}:${today}`,
+      );
+    }
+
     return this.toPublic(pet, child);
   }
 

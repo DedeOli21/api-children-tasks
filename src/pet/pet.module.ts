@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PetService } from './pet.service';
 import { PetController } from './pet.controller';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import {
   VirtualPet,
   ShopItem,
@@ -15,6 +16,7 @@ import {
   imports: [
     TypeOrmModule.forFeature([VirtualPet, ShopItem, InventoryItem, User, HistoryEntry]),
     AuthModule,
+    NotificationsModule,
   ],
   controllers: [PetController],
   providers: [PetService],
