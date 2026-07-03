@@ -33,4 +33,7 @@ export * from './shop-item.entity';
 export { ShopItemType } from './shop-item.entity';
 export * from './virtual-pet.entity';
 export * from './inventory-item.entity';
+export * from './family-settings.entity';
+export * from './notification.entity';
+export { NotificationType } from './notification.entity';
 

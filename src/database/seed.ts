@@ -31,6 +31,8 @@ import {
   ShopItemType,
   VirtualPet,
   InventoryItem,
+  FamilySettings,
+  Notification,
 } from '../entities';
 import { generateInviteCode } from '../children/invite-code.util';
 
@@ -60,6 +62,8 @@ const entities = [
   ShopItem,
   VirtualPet,
   InventoryItem,
+  FamilySettings,
+  Notification,
 ];
 
 const dataSource = new DataSource(

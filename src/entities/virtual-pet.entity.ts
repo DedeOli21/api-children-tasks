@@ -57,6 +57,12 @@ export class VirtualPet {
   })
   lastDecayAt: Date | null;
 
+  // Penalidade orgânica: a rotina da meia-noite marca a planta como doente
+  // quando o dia termina incompleto (sem freeze). Curada quando a criança
+  // volta a completar todos os combinados do dia.
+  @Column({ name: 'sick_since', type: 'date', nullable: true })
+  sickSince: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

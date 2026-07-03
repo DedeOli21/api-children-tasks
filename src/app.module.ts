@@ -53,6 +53,8 @@ import {
   ShopItem,
   VirtualPet,
   InventoryItem,
+  FamilySettings,
+  Notification,
 } from './entities';
 
 const entities = [
@@ -81,6 +83,8 @@ const entities = [
   ShopItem,
   VirtualPet,
   InventoryItem,
+  FamilySettings,
+  Notification,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma

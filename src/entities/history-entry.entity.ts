@@ -15,6 +15,8 @@ export enum HistoryType {
   STREAK_FREEZE_USED = 'streak_freeze_used',
   STARS_ADD = 'stars_add',
   STARS_SUBTRACT = 'stars_subtract',
+  // Dedução automática da rotina da meia-noite (dia incompleto sem freeze)
+  DAILY_PENALTY = 'daily_penalty',
 }
 
 @Entity('history_entries')
