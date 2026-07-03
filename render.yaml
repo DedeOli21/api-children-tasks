@@ -9,5 +9,19 @@ services:
         value: production
       - key: PORT
         value: 3001
+      # Secrets/config obrigatórios — o Render pede o valor no primeiro deploy
+      # e depois guarda com segurança (nunca vão para o git).
+      - key: DATABASE_TYPE
+        value: postgres
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      # Domínio(s) do frontend, separados por vírgula (ex: https://app.vercel.app)
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Defina "true" apenas no primeiro deploy (cria as tabelas novas),
+      # depois REMOVA esta variável para travar o schema em produção.
+      - key: DB_SYNC
+        sync: false
     healthCheckPath: /api/health
-
