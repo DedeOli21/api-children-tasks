@@ -89,6 +89,9 @@ export class PetService {
       xp: pet.xp,
       stage: this.stageOf(pet.xp),
       mood: this.moodOf(pet),
+      // Doente: penalidade da meia-noite; cura ao fechar um dia completo
+      sick: !!pet.sickSince,
+      sickSince: pet.sickSince,
       // Planta murcha visualmente quando o streak quebrou há pouco
       wilted:
         child.currentStreak === 0 &&
