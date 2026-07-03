@@ -23,6 +23,7 @@ import { MessagesModule } from './messages/messages.module';
 import { FocusModule } from './focus/focus.module';
 import { GoalsModule } from './goals/goals.module';
 import { EventsModule } from './events/events.module';
+import { PetModule } from './pet/pet.module';
 import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -129,6 +130,7 @@ const shouldSynchronize =
     FocusModule,
     GoalsModule,
     EventsModule,
+    PetModule,
   ],
   controllers: [AppController],
   providers: [
