@@ -85,7 +85,9 @@ export class MissionsService {
     const today = new Date().toISOString().split('T')[0];
     const parentIds = new Set<string>();
     for (const childId of dto.childIds) {
-      const child = await this.userRepository.findOne({ where: { id: childId } });
+      const child = await this.userRepository.findOne({
+        where: { id: childId },
+      });
       if (child?.parentId) parentIds.add(child.parentId);
     }
     for (const parentId of parentIds) {
@@ -162,7 +164,9 @@ export class MissionsService {
     const mission = await this.getMissionForParent(parent, missionId);
 
     if (mission.status !== MissionStatus.SCHEDULED) {
-      throw new BadRequestException('Apenas missões agendadas podem voltar para a inbox');
+      throw new BadRequestException(
+        'Apenas missões agendadas podem voltar para a inbox',
+      );
     }
 
     mission.status = MissionStatus.INBOX;
@@ -197,7 +201,9 @@ export class MissionsService {
     const mission = await this.getMissionForParent(parent, missionId);
 
     if (mission.status !== MissionStatus.COMPLETED) {
-      throw new BadRequestException('A missão ainda não foi concluída pela criança');
+      throw new BadRequestException(
+        'A missão ainda não foi concluída pela criança',
+      );
     }
 
     const { multiplier: eventMultiplier, event } =
@@ -231,15 +237,10 @@ export class MissionsService {
         }),
       );
 
-      petReward = await this.petRewardsService.awardForCompletion(manager, {
-        familyId: parent.id,
+      petReward = await this.petRewardsService.progressOnlyForCompletion(
+        manager,
         child,
-        sourceType:
-          mission.createdBy?.role === UserRole.THERAPIST
-            ? PetDropSourceType.THERAPIST_MISSION
-            : PetDropSourceType.TEACHER_MISSION,
-        sourceId: mission.id,
-      });
+      );
 
       return child.currentStars;
     });
@@ -300,8 +301,27 @@ export class MissionsService {
     mission.completedAt = new Date();
     await this.missionRepository.save(mission);
 
+    const child = await this.userRepository.findOneOrFail({
+      where: { id: mission.assignedToId },
+    });
+    const petReward =
+      child.parentId === null
+        ? null
+        : await this.dataSource.transaction((manager) =>
+            this.petRewardsService.awardForCompletion(manager, {
+              familyId: child.parentId as string,
+              child,
+              sourceType:
+                mission.createdBy?.role === UserRole.THERAPIST
+                  ? PetDropSourceType.THERAPIST_MISSION
+                  : PetDropSourceType.TEACHER_MISSION,
+              sourceId: mission.id,
+            }),
+          );
+
     return {
       ...this.toPublic(mission),
+      petReward,
       message: 'Missão enviada para aprovação! Aguardando o chefe aprovar 😄',
     };
   }
@@ -327,7 +347,9 @@ export class MissionsService {
       throw new ForbiddenException('Você não pode remover esta missão');
     }
     if (mission.status === MissionStatus.APPROVED) {
-      throw new BadRequestException('Missões aprovadas não podem ser removidas');
+      throw new BadRequestException(
+        'Missões aprovadas não podem ser removidas',
+      );
     }
 
     await this.missionRepository.remove(mission);

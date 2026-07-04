@@ -52,8 +52,8 @@ export class PetDropRule {
 }
 
 /**
- * Evento auditável de drop concedido.
- * Deve ser criado na mesma transação que conclui/aprova uma tarefa ou missão.
+ * Evento auditável de tentativa de drop.
+ * petItemId fica nulo quando houve rolagem, mas nenhum item foi concedido.
  */
 @Entity('pet_drops')
 @Index(['childId', 'createdAt'])
@@ -76,12 +76,16 @@ export class PetDrop {
   @JoinColumn({ name: 'child_id' })
   child: User;
 
-  @Column({ name: 'pet_item_id' })
-  petItemId: string;
+  @Column({ name: 'pet_item_id', nullable: true })
+  petItemId: string | null;
 
-  @ManyToOne(() => PetItem, { onDelete: 'CASCADE', eager: true })
+  @ManyToOne(() => PetItem, {
+    onDelete: 'CASCADE',
+    eager: true,
+    nullable: true,
+  })
   @JoinColumn({ name: 'pet_item_id' })
-  petItem: PetItem;
+  petItem: PetItem | null;
 
   @Column({ name: 'source_type', type: 'text' })
   sourceType: PetDropSourceType;

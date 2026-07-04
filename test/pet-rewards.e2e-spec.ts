@@ -68,7 +68,7 @@ describe('Pet Rewards and Drops (e2e)', () => {
     return petItem;
   }
 
-  it('aprovação de tarefa comum sincroniza XP do pet e concede drop transacional', async () => {
+  it('conclusão de tarefa comum sincroniza XP do pet e concede drop transacional', async () => {
     const expectedItem = await seedDrop(PetDropSourceType.DAILY_TASK);
     const parent = await registerParent(app);
     const { child, username, password } = await createChild(app, parent.token);
@@ -80,10 +80,25 @@ describe('Pet Rewards and Drops (e2e)', () => {
       .send({ title: 'Guardar mochila', iconEmoji: '🎒' })
       .expect(201);
 
-    await request(app.getHttpServer())
+    const completed = await request(app.getHttpServer())
       .patch(`/api/tasks/${task.body.id}/complete`)
       .set(authHeader(childAuth.token))
       .expect(200);
+
+    expect(completed.body.petReward.progress).toMatchObject({
+      xp: 100,
+      level: 2,
+      animationState: 'happy',
+    });
+    expect(completed.body.petReward.drop).toMatchObject({
+      dropped: true,
+      chanceBasisPoints: 10000,
+      item: {
+        id: expectedItem.id,
+        key: expectedItem.key,
+        attachmentSlot: 'head',
+      },
+    });
 
     const pending = await request(app.getHttpServer())
       .get('/api/tasks/pending-approval')
@@ -100,15 +115,7 @@ describe('Pet Rewards and Drops (e2e)', () => {
       level: 2,
       animationState: 'happy',
     });
-    expect(approved.body.petReward.drop).toMatchObject({
-      dropped: true,
-      chanceBasisPoints: 10000,
-      item: {
-        id: expectedItem.id,
-        key: expectedItem.key,
-        attachmentSlot: 'head',
-      },
-    });
+    expect(approved.body.petReward.drop.dropped).toBe(false);
 
     const inventory = await dataSource.getRepository(PetInventoryItem).findOne({
       where: { childId: child.id, petItemId: expectedItem.id },
@@ -129,7 +136,7 @@ describe('Pet Rewards and Drops (e2e)', () => {
     expect(drop?.sourceId).toBe(pending.body[0].logId);
   });
 
-  it('aprovação de missão do professor usa a tabela de drop de missões extras', async () => {
+  it('conclusão de missão do professor usa a tabela de drop de missões extras', async () => {
     const expectedItem = await seedDrop(
       PetDropSourceType.TEACHER_MISSION,
       PetItemRarity.RARE,
@@ -156,17 +163,12 @@ describe('Pet Rewards and Drops (e2e)', () => {
       .send({ date: today })
       .expect(200);
 
-    await request(app.getHttpServer())
+    const completed = await request(app.getHttpServer())
       .patch(`/api/missions/${mission.body[0].id}/complete`)
       .set(authHeader(childAuth.token))
       .expect(200);
 
-    const approved = await request(app.getHttpServer())
-      .patch(`/api/missions/${mission.body[0].id}/approve`)
-      .set(authHeader(parent.token))
-      .expect(200);
-
-    expect(approved.body.petReward.drop).toMatchObject({
+    expect(completed.body.petReward.drop).toMatchObject({
       dropped: true,
       chanceBasisPoints: 10000,
       item: {
@@ -174,6 +176,13 @@ describe('Pet Rewards and Drops (e2e)', () => {
         key: expectedItem.key,
       },
     });
+
+    const approved = await request(app.getHttpServer())
+      .patch(`/api/missions/${mission.body[0].id}/approve`)
+      .set(authHeader(parent.token))
+      .expect(200);
+
+    expect(approved.body.petReward.drop.dropped).toBe(false);
 
     const drop = await dataSource.getRepository(PetDrop).findOne({
       where: {

@@ -49,6 +49,7 @@ export interface PetRewardResult {
       rarity: PetItemRarity;
       attachmentSlot: string;
       attachmentKey: string;
+      assetUrl: string | null;
       previewEmoji: string;
       isPremium: boolean;
     };
@@ -93,6 +94,21 @@ export class PetRewardsService {
     };
   }
 
+  async progressOnlyForCompletion(
+    manager: EntityManager,
+    child: User,
+  ): Promise<PetRewardResult> {
+    const progress = await this.syncProgressWithStreak(manager, child);
+    return {
+      progress,
+      drop: {
+        dropped: false,
+        chanceBasisPoints: 0,
+        rollBasisPoints: 0,
+      },
+    };
+  }
+
   async awardForCompletion(
     manager: EntityManager,
     input: {
@@ -103,14 +119,22 @@ export class PetRewardsService {
     },
   ): Promise<PetRewardResult> {
     const progress = await this.syncProgressWithStreak(manager, input.child);
+
+    const existingAttempt = await this.findExistingAttempt(manager, input);
+    if (existingAttempt) {
+      return {
+        progress,
+        drop: this.toDropResult(existingAttempt),
+      };
+    }
+
     const rules = await this.getEligibleRules(
       manager,
       input.familyId,
       input.sourceType,
       progress.level,
     );
-    const selectedRule =
-      rules[0] ?? this.defaultRuleFor(input.sourceType);
+    const selectedRule = rules[0] ?? this.defaultRuleFor(input.sourceType);
     const rollBasisPoints = this.rollBasisPoints();
 
     const dropBase = {
@@ -120,6 +144,11 @@ export class PetRewardsService {
     };
 
     if (rollBasisPoints > selectedRule.chanceBasisPoints) {
+      await this.recordDropAttempt(manager, input, {
+        petItemId: null,
+        chanceBasisPoints: selectedRule.chanceBasisPoints,
+        rollBasisPoints,
+      });
       return { progress, drop: dropBase };
     }
 
@@ -131,6 +160,11 @@ export class PetRewardsService {
       progress.level,
     );
     if (!petItem) {
+      await this.recordDropAttempt(manager, input, {
+        petItemId: null,
+        chanceBasisPoints: selectedRule.chanceBasisPoints,
+        rollBasisPoints,
+      });
       return { progress, drop: dropBase };
     }
 
@@ -169,10 +203,66 @@ export class PetRewardsService {
           rarity: petItem.rarity,
           attachmentSlot: petItem.attachmentSlot,
           attachmentKey: petItem.attachmentKey,
+          assetUrl: petItem.assetUrl,
           previewEmoji: petItem.previewEmoji,
           isPremium: petItem.isPremium,
         },
       },
+    };
+  }
+
+  private async findExistingAttempt(
+    manager: EntityManager,
+    input: {
+      child: User;
+      sourceType: PetDropSourceType;
+      sourceId?: string | null;
+    },
+  ) {
+    if (!input.sourceId) return null;
+    return manager.findOne(PetDrop, {
+      where: {
+        childId: input.child.id,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+      },
+    });
+  }
+
+  private async recordDropAttempt(
+    manager: EntityManager,
+    input: {
+      familyId: string;
+      child: User;
+      sourceType: PetDropSourceType;
+      sourceId?: string | null;
+    },
+    attempt: {
+      petItemId: string | null;
+      chanceBasisPoints: number;
+      rollBasisPoints: number;
+    },
+  ) {
+    if (!input.sourceId) return;
+    await manager.save(
+      manager.create(PetDrop, {
+        familyId: input.familyId,
+        childId: input.child.id,
+        petItemId: attempt.petItemId,
+        sourceType: input.sourceType,
+        sourceId: input.sourceId,
+        chanceBasisPoints: attempt.chanceBasisPoints,
+        rollBasisPoints: attempt.rollBasisPoints,
+      }),
+    );
+  }
+
+  private toDropResult(drop: PetDrop): PetRewardResult['drop'] {
+    // Tentativa já processada: não reexibe nem concede o mesmo prêmio.
+    return {
+      dropped: false,
+      chanceBasisPoints: drop.chanceBasisPoints,
+      rollBasisPoints: drop.rollBasisPoints,
     };
   }
 

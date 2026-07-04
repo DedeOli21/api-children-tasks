@@ -154,6 +154,20 @@ export class TasksService {
     // O streak conta o esforço da criança (marcou tudo), mas as estrelas
     // só são creditadas quando o responsável aprova (approveLog)
     const streakInfo = await this.streaksService.updateStreak(userId);
+    const child = await this.userRepository.findOneOrFail({
+      where: { id: userId },
+    });
+    const petReward =
+      child.parentId === null
+        ? null
+        : await this.dataSource.transaction((manager) =>
+            this.petRewardsService.awardForCompletion(manager, {
+              familyId: child.parentId as string,
+              child,
+              sourceType: PetDropSourceType.DAILY_TASK,
+              sourceId: dailyLog.id,
+            }),
+          );
 
     return {
       task,
@@ -162,6 +176,7 @@ export class TasksService {
       currentStars: user.currentStars,
       starsEarned: 0,
       streak: streakInfo.streak,
+      petReward,
       message: `Tarefa "${task.title}" enviada para aprovação! Aguardando o chefe aprovar 😄`,
     };
   }
@@ -208,7 +223,9 @@ export class TasksService {
       throw new BadRequestException('Tarefa já foi aprovada');
     }
     if (log.status !== TaskExecutionStatus.COMPLETED) {
-      throw new BadRequestException('A criança ainda não marcou esta tarefa como feita');
+      throw new BadRequestException(
+        'A criança ainda não marcou esta tarefa como feita',
+      );
     }
 
     // Multiplicadores: streak da criança × Evento Surpresa vigente
@@ -251,12 +268,10 @@ export class TasksService {
         }),
       );
 
-      petReward = await this.petRewardsService.awardForCompletion(manager, {
-        familyId: parentId,
+      petReward = await this.petRewardsService.progressOnlyForCompletion(
+        manager,
         child,
-        sourceType: PetDropSourceType.DAILY_TASK,
-        sourceId: log.id,
-      });
+      );
     });
 
     return {

@@ -90,9 +90,22 @@ export class ActiveTasksService {
     task.completedAt = new Date();
     const saved = await this.activeTaskRepository.save(task);
     const streakInfo = await this.streaksService.updateStreak(task.childId);
+    const child = await this.dataSource.getRepository(User).findOneOrFail({
+      where: { id: task.childId },
+    });
+    const petReward = await this.dataSource.transaction((manager) =>
+      this.petRewardsService.awardForCompletion(manager, {
+        familyId: task.familyId,
+        child,
+        sourceType: PetDropSourceType.DAILY_TASK,
+        sourceId: task.id,
+      }),
+    );
+
     return {
       ...this.toPublic(saved),
       streak: streakInfo.streak,
+      petReward,
       message: `Tarefa "${task.title}" enviada para aprovação!`,
     };
   }
@@ -160,12 +173,10 @@ export class ActiveTasksService {
         }),
       );
 
-      petReward = await this.petRewardsService.awardForCompletion(manager, {
-        familyId: parent.id,
+      petReward = await this.petRewardsService.progressOnlyForCompletion(
+        manager,
         child,
-        sourceType: PetDropSourceType.DAILY_TASK,
-        sourceId: task.id,
-      });
+      );
 
       return child.currentStars;
     });

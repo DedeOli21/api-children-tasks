@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import {
   User,
   UserRole,
@@ -33,9 +33,12 @@ export class LegacyMigrationService implements OnApplicationBootstrap {
     private routineRepository: Repository<Routine>,
     @InjectRepository(MysteryPrize)
     private mysteryPrizeRepository: Repository<MysteryPrize>,
+    private dataSource: DataSource,
   ) {}
 
   async onApplicationBootstrap() {
+    await this.ensurePetDropAttemptsSchema();
+
     // Papéis antigos → novos
     const renamedAdmins = await this.userRepository.update(
       { role: 'admin' as UserRole },
@@ -81,7 +84,9 @@ export class LegacyMigrationService implements OnApplicationBootstrap {
           { familyId: firstParent.id },
         );
         if (result.affected) {
-          this.logger.log(`${result.affected} registro(s) de ${name} atribuído(s) à família ${firstParent.email}`);
+          this.logger.log(
+            `${result.affected} registro(s) de ${name} atribuído(s) à família ${firstParent.email}`,
+          );
         }
       }
     }
@@ -95,7 +100,9 @@ export class LegacyMigrationService implements OnApplicationBootstrap {
       await this.userRepository.save(child);
     }
     if (childrenWithoutCode.length) {
-      this.logger.log(`Código de convite gerado para ${childrenWithoutCode.length} criança(s)`);
+      this.logger.log(
+        `Código de convite gerado para ${childrenWithoutCode.length} criança(s)`,
+      );
     }
   }
 
@@ -107,5 +114,13 @@ export class LegacyMigrationService implements OnApplicationBootstrap {
       });
       if (!exists) return code;
     }
+  }
+
+  private async ensurePetDropAttemptsSchema() {
+    if (this.dataSource.options.type !== 'postgres') return;
+
+    await this.dataSource.query(
+      'ALTER TABLE IF EXISTS pet_drops ALTER COLUMN pet_item_id DROP NOT NULL',
+    );
   }
 }

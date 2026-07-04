@@ -85,6 +85,11 @@ describe('Task Templates v2 (e2e)', () => {
       .expect(({ body }) => {
         expect(body.status).toBe('completed');
         expect(body.streak).toBe(1);
+        expect(body.petReward.progress).toMatchObject({
+          xp: 100,
+          level: 2,
+          animationState: 'happy',
+        });
       });
 
     const pending = await request(app.getHttpServer())
