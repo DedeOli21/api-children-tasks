@@ -108,6 +108,21 @@ describe('Task Templates v2 (e2e)', () => {
       .expect(200);
 
     expect(stars.body.currentStars).toBe(3);
+
+    const history = await request(app.getHttpServer())
+      .get('/api/history/range')
+      .set(authHeader(parent.token))
+      .query({ childId: child.id, startDate: today, endDate: today })
+      .expect(200);
+
+    expect(history.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'task_complete',
+          starsChange: 3,
+        }),
+      ]),
+    );
   });
 
   it('cria missão extra para uma data específica sem exigir recorrência', async () => {

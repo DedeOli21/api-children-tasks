@@ -38,11 +38,8 @@ export class HistoryController {
     @Query('childId') childId?: string,
   ) {
     const child = await this.accessControl.resolveChild(user, childId);
-    return this.historyService.findByDateRange(
-      child.id,
-      new Date(startDate),
-      new Date(endDate),
-    );
+    const { start, end } = this.parseDateRange(startDate, endDate);
+    return this.historyService.findByDateRange(child.id, start, end);
   }
 
   @Get('statistics')
@@ -52,5 +49,19 @@ export class HistoryController {
   ) {
     const child = await this.accessControl.resolveChild(user, childId);
     return this.historyService.getStatistics(child.id);
+  }
+
+  private parseDateRange(startDate: string, endDate: string) {
+    const isDateOnly = /^\d{4}-\d{2}-\d{2}$/;
+    return {
+      start: new Date(
+        isDateOnly.test(startDate)
+          ? `${startDate}T00:00:00.000-03:00`
+          : startDate,
+      ),
+      end: new Date(
+        isDateOnly.test(endDate) ? `${endDate}T23:59:59.999-03:00` : endDate,
+      ),
+    };
   }
 }
