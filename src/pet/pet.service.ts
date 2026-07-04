@@ -290,7 +290,7 @@ export class PetService {
         order: { type: 'ASC', price: 'ASC' },
       }),
     ]);
-    return [...global, ...custom];
+    return [...global, ...custom].filter((item) => item.type !== ShopItemType.SKIN);
   }
 
   /**
@@ -448,7 +448,6 @@ export class PetService {
       remaining: result.remaining,
       message:
         result.item.type === ShopItemType.WATER
-          ? `${result.item.emoji} Glub glub! Sua plantinha agradece 💚`
           ? `${result.item.emoji} Glub glub! Seu pet agradece 💚`
           : `${result.item.emoji} Nham! Seu pet ficou mais animado 💚`,
     };
@@ -555,6 +554,12 @@ export class PetService {
   // ============ LOJA DO PET (gestão pelo responsável) ============
 
   async createShopItem(familyId: string, dto: CreateShopItemDto) {
+    if (dto.type === ShopItemType.SKIN) {
+      throw new BadRequestException(
+        'A escolha do mascote agora é feita entre cachorro e gatinho na tela do pet',
+      );
+    }
+
     const isConsumable =
       dto.type === ShopItemType.WATER || dto.type === ShopItemType.FOOD;
     if (isConsumable && !dto.restoreAmount) {
@@ -565,7 +570,7 @@ export class PetService {
         familyId,
         type: dto.type,
         name: dto.name,
-        emoji: dto.emoji ?? '🌱',
+        emoji: dto.emoji ?? '🐾',
         description: dto.description ?? null,
         price: dto.price,
         restoreAmount: isConsumable ? (dto.restoreAmount ?? 0) : 0,

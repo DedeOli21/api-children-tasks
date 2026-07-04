@@ -265,7 +265,7 @@ export class StreaksService {
    * - dia completo → streak continua (e incrementa, cobrindo contagem retroativa);
    * - dia incompleto com freeze no inventário → consome 1 e preserva o streak;
    * - dia incompleto sem freeze → PUNIÇÃO TRIPLA numa única transação:
-   *   streak zerado + estrelas deduzidas (FamilySettings) + planta doente,
+   *   streak zerado + estrelas deduzidas (FamilySettings) + pet triste,
    *   com histórico e notificações para criança e responsável.
    * A dedução acontece no máximo uma vez por avaliação — quem ficou uma
    * semana sem abrir o app não perde 7x (o cron diário cobre o caso normal).
@@ -312,7 +312,7 @@ export class StreaksService {
           manager.create(HistoryEntry, {
             userId: user.id,
             type: HistoryType.STREAK_FREEZE_USED,
-            description: `Regador Mágico consumido automaticamente para proteger o streak em ${day}`,
+            description: `Escudo Mágico consumido automaticamente para proteger o streak em ${day}`,
             starsChange: 0,
           }),
         );
@@ -320,8 +320,8 @@ export class StreaksService {
           manager,
           user.id,
           NotificationType.GENERAL,
-          '🛡️ Seu Regador Mágico te salvou!',
-          'Ontem ficou corrido, mas sua sequência e sua plantinha estão protegidas.',
+          '🛡️ Seu Escudo Mágico te salvou!',
+          'Ontem ficou corrido, mas sua sequência e seu pet estão protegidos.',
           `freeze:${user.id}:${day}`,
         );
       }
@@ -346,7 +346,7 @@ export class StreaksService {
           );
         }
 
-        // 3ª punição: a planta adoece até um dia fechar completo de novo
+        // 3ª punição: o pet fica triste até um dia fechar completo de novo
         let pet = await manager.findOne(VirtualPet, {
           where: { childId: user.id },
         });
@@ -366,7 +366,7 @@ export class StreaksService {
           manager,
           user.id,
           NotificationType.PET_SICK,
-          '😢 Sua plantinha ficou doente...',
+          '😢 Seu pet ficou triste...',
           'As tarefas de ontem não foram concluídas. Complete os combinados de hoje para curá-la!',
           `pet_sick:${user.id}:${brokenOn}`,
         );
@@ -394,7 +394,7 @@ export class StreaksService {
     return frozenDays.length;
   }
 
-  // Cura a planta quando a criança volta a fechar um dia completo
+  // Cura o pet quando a criança volta a fechar um dia completo
   private async curePet(childId: string): Promise<void> {
     await this.dataSource
       .getRepository(VirtualPet)
@@ -463,7 +463,7 @@ export class StreaksService {
     await this.userRepository.save(user);
     await this.syncPetProgress(user, PetAnimationState.HAPPY);
 
-    // Dia completo cura a planta doente (penalidade orgânica revertida)
+    // Dia completo cura o pet triste/doente (penalidade orgânica revertida)
     await this.curePet(userId);
 
     return {

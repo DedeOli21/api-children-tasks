@@ -63,7 +63,7 @@ export class RewardsService {
   /**
    * Resgate transacional: débito das estrelas, efeito do item e histórico
    * acontecem juntos ou não acontecem. Itens do tipo streak_freeze
-   * ("Regador Mágico") creditam +1 congelamento em vez de um privilégio.
+   * ("Escudo Mágico") creditam +1 proteção em vez de um privilégio.
    */
   async redeemReward(userId: string, rewardId: string, familyId: string) {
     return this.dataSource.transaction(async (manager) => {
@@ -100,7 +100,7 @@ export class RewardsService {
           userId,
           type: HistoryType.REWARD_REDEEM,
           description: isFreeze
-            ? `Comprou ${reward.title} (${reward.emoji}): +1 proteção da plantinha`
+            ? `Comprou ${reward.title} (${reward.emoji}): +1 proteção de sequência`
             : `Resgatou recompensa: ${reward.title} (${reward.emoji})`,
           starsChange: -reward.cost,
         }),
@@ -112,7 +112,7 @@ export class RewardsService {
         currentStars: user.currentStars,
         streakFreezes: user.streakFreezes,
         message: isFreeze
-          ? `${reward.emoji} "${reward.title}" guardado! Sua plantinha está protegida (${user.streakFreezes} no total)`
+          ? `${reward.emoji} "${reward.title}" guardado! Sua sequência está protegida (${user.streakFreezes} no total)`
           : `Recompensa "${reward.title}" resgatada! -${reward.cost} estrelas`,
       };
     });
