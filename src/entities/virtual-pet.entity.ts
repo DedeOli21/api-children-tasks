@@ -29,9 +29,6 @@ export type PetEquippedItems = {
 /**
  * Mascote virtual da criança.
  *
- * Fase 1 mantém compatibilidade com a planta atual, mas adiciona o contrato
- * game-like para Rive/Pixi: state machine e attachments equipados por slot.
- *
  * equippedItems é um snapshot denormalizado para leitura rápida do frontend:
  * { head: "hat_red", eyes: "glasses_round", background: "garden_day" }.
  * A posse canônica dos itens mora em PetInventoryItem.
@@ -41,7 +38,7 @@ export class VirtualPet {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // Uma planta por criança
+  // Um pet por criança
   @Column({ name: 'child_id', unique: true })
   childId: string;
 
@@ -49,12 +46,12 @@ export class VirtualPet {
   @JoinColumn({ name: 'child_id' })
   child: User;
 
-  // A criança batiza a própria planta
-  @Column({ default: 'Plantinha' })
+  // A criança batiza o próprio pet
+  @Column({ default: 'Lulu' })
   name: string;
 
   // Modelo/artboard que o frontend deve carregar (ex.: lulu_pomeranian_v1)
-  @Column({ name: 'model_key', default: 'plant_v1' })
+  @Column({ name: 'model_key', default: 'dog' })
   modelKey: string;
 
   @Column({ name: 'rive_artboard', type: 'text', nullable: true })
@@ -77,8 +74,7 @@ export class VirtualPet {
   @Column({ name: 'nutrition_level', type: 'int', default: 80 })
   nutritionLevel: number;
 
-  // Experiência acumulada cuidando da planta; o estágio (semente → broto →
-  // planta → florida) é derivado do XP no serviço
+  // Experiência acumulada cuidando do pet.
   @Column({ type: 'int', default: 0 })
   xp: number;
 
@@ -104,7 +100,7 @@ export class VirtualPet {
   })
   lastDecayAt: Date | null;
 
-  // Penalidade orgânica: a rotina da meia-noite marca a planta como doente
+  // Penalidade orgânica: a rotina da meia-noite marca o pet como triste/doente
   // quando o dia termina incompleto (sem freeze). Curada quando a criança
   // volta a completar todos os combinados do dia.
   @Column({ name: 'sick_since', type: 'date', nullable: true })

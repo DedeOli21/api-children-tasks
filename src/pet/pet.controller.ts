@@ -11,6 +11,7 @@ import {
 import { PetService } from './pet.service';
 import { RenamePetDto } from './dto/rename-pet.dto';
 import { CarePetDto } from './dto/care-pet.dto';
+import { ChoosePetSpeciesDto } from './dto/choose-pet-species.dto';
 import { CreateShopItemDto, UpdateShopItemDto } from './dto/create-shop-item.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,14 +40,20 @@ export class PetController {
     return this.petService.rename(user, dto.name);
   }
 
-  // Regar/alimentar consumindo item do inventário
+  @Patch('species')
+  @Roles(UserRole.CHILD)
+  chooseSpecies(@CurrentUser() user: User, @Body() dto: ChoosePetSpeciesDto) {
+    return this.petService.chooseSpecies(user, dto.species);
+  }
+
+  // Hidratar/alimentar consumindo item do inventário
   @Post('care')
   @Roles(UserRole.CHILD)
   care(@CurrentUser() user: User, @Body() dto: CarePetDto) {
     return this.petService.care(user, dto.shopItemId);
   }
 
-  // ============ LOJA BOTÂNICA ============
+  // ============ LOJA DO PET ============
 
   @Get('shop')
   @Roles(UserRole.CHILD, UserRole.PARENT)
@@ -74,7 +81,7 @@ export class PetController {
     return this.petService.equip(user, itemId);
   }
 
-  // ============ ECONOMIA BOTÂNICA (responsável) ============
+  // ============ LOJA DO PET (responsável) ============
 
   @Post('shop-items')
   @Roles(UserRole.PARENT)

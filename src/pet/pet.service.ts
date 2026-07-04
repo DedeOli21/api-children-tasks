@@ -8,6 +8,7 @@ import { DataSource, IsNull, Repository } from 'typeorm';
 import {
   VirtualPet,
   PetEquippedItems,
+  PetAttachmentSlot,
   ShopItem,
   ShopItemType,
   InventoryItem,
@@ -24,6 +25,8 @@ import { CreateShopItemDto, UpdateShopItemDto } from './dto/create-shop-item.dto
 const DECAY_PER_HOUR = 3;
 // XP ganho por ato de cuidado
 const XP_PER_CARE = 5;
+const DEFAULT_PET_NAME = 'Lulu';
+const DEFAULT_PET_MODEL = 'dog';
 
 export type PetStage = 'seed' | 'sprout' | 'growing' | 'blooming';
 export type PetMood = 'happy' | 'thirsty' | 'hungry' | 'sad';
@@ -116,7 +119,7 @@ export class PetService {
       // Doente: penalidade da meia-noite; cura ao fechar um dia completo
       sick: !!pet.sickSince,
       sickSince: pet.sickSince,
-      // Planta murcha visualmente quando o streak quebrou há pouco
+      // Pet triste visualmente quando o streak quebrou há pouco
       wilted:
         child.currentStreak === 0 &&
         !!child.streakBrokenAt &&
@@ -169,15 +172,36 @@ export class PetService {
 
   // ============ PET ============
 
-  // Criação preguiçosa: toda criança ganha a planta no primeiro acesso
+  // Criação preguiçosa: toda criança ganha o pet no primeiro acesso
   private async getOrCreate(childId: string): Promise<VirtualPet> {
     let pet = await this.petRepository.findOne({ where: { childId } });
     if (!pet) {
       pet = await this.petRepository.save(
-        this.petRepository.create({ childId, lastDecayAt: new Date() }),
+        this.petRepository.create({
+          childId,
+          name: DEFAULT_PET_NAME,
+          modelKey: DEFAULT_PET_MODEL,
+          lastDecayAt: new Date(),
+        }),
       );
     }
+    if (this.normalizeLegacyPet(pet)) {
+      pet = await this.petRepository.save(pet);
+    }
     return pet;
+  }
+
+  private normalizeLegacyPet(pet: VirtualPet): boolean {
+    let changed = false;
+    if (!pet.modelKey || pet.modelKey === 'plant_v1') {
+      pet.modelKey = DEFAULT_PET_MODEL;
+      changed = true;
+    }
+    if (!pet.name || pet.name === 'Plantinha') {
+      pet.name = DEFAULT_PET_NAME;
+      changed = true;
+    }
+    return changed;
   }
 
   async getPet(child: User) {
@@ -193,8 +217,8 @@ export class PetService {
       await this.notificationsService.notify(
         child.id,
         NotificationType.PET_THIRSTY,
-        mood === 'thirsty' ? '💧 Sua planta está com sede!' : '🌰 Sua planta está com fome!',
-        `${pet.name} precisa de você. Visite a Loja Botânica!`,
+        mood === 'thirsty' ? '💧 Seu pet está com sede!' : '🌰 Seu pet está com fome!',
+        `${pet.name} precisa de você. Visite a Loja do Pet!`,
         `pet_needs:${child.id}:${today}`,
       );
     }
@@ -206,7 +230,50 @@ export class PetService {
     const pet = await this.getOrCreate(child.id);
     pet.name = name;
     await this.petRepository.save(pet);
-    return { id: pet.id, name: pet.name, message: `Sua plantinha agora se chama ${name}! 🌱` };
+    return { id: pet.id, name: pet.name, message: `Seu pet agora se chama ${name}!` };
+  }
+
+  async chooseSpecies(child: User, species: 'dog' | 'cat') {
+    return this.dataSource.transaction(async (manager) => {
+      let pet = await manager.findOne(VirtualPet, {
+        where: { childId: child.id },
+      });
+      if (!pet) {
+        pet = manager.create(VirtualPet, {
+          childId: child.id,
+          name: DEFAULT_PET_NAME,
+          lastDecayAt: new Date(),
+        });
+      }
+
+      const speciesKey = species === 'cat' ? 'cat_orange' : 'dog';
+      const equippedItems: PetEquippedItems = { ...(pet.equippedItems ?? {}) };
+      equippedItems.species = speciesKey;
+      pet.modelKey = speciesKey;
+      pet.equippedItems = equippedItems;
+      await manager.save(pet);
+
+      const equippedSpeciesItems = await manager.find(PetInventoryItem, {
+        where: {
+          childId: child.id,
+          equipped: true,
+          equippedSlot: PetAttachmentSlot.SPECIES,
+        },
+      });
+      for (const item of equippedSpeciesItems) {
+        item.equipped = false;
+        item.equippedSlot = null;
+        await manager.save(item);
+      }
+
+      return {
+        ...(await this.toPublic(pet, child)),
+        message:
+          species === 'cat'
+            ? 'Gatinho escolhido como seu pet!'
+            : 'Cachorro escolhido como seu pet!',
+      };
+    });
   }
 
   // ============ LOJA ============
@@ -275,7 +342,7 @@ export class PetService {
         manager.create(HistoryEntry, {
           userId: freshChild.id,
           type: HistoryType.REWARD_REDEEM,
-          description: `Comprou na Loja Botânica: ${item.name} ${item.emoji}`,
+          description: `Comprou na Loja do Pet: ${item.name} ${item.emoji}`,
           starsChange: -item.price,
         }),
       );
@@ -320,7 +387,7 @@ export class PetService {
     return [...shopItems, ...modernItems];
   }
 
-  // ============ CUIDADO (regar/alimentar) ============
+  // ============ CUIDADO (hidratar/alimentar) ============
 
   async care(child: User, shopItemId: string) {
     const result = await this.dataSource.transaction(async (manager) => {
@@ -328,29 +395,29 @@ export class PetService {
         where: { childId: child.id, shopItemId },
       });
       if (!inventory || !inventory.shopItem || inventory.quantity < 1) {
-        throw new BadRequestException('Você não tem este item — compre na Loja Botânica');
+        throw new BadRequestException('Você não tem este item — compre na Loja do Pet');
       }
       const item = inventory.shopItem;
       const isWater = item.type === ShopItemType.WATER;
       const isFood = item.type === ShopItemType.FOOD;
       if (!isWater && !isFood) {
-        throw new BadRequestException('Apenas água e comida podem ser usadas na planta');
+        throw new BadRequestException('Apenas água e comida podem ser usadas no pet');
       }
 
       const pet = await manager.findOne(VirtualPet, {
         where: { childId: child.id },
       });
       if (!pet) {
-        throw new NotFoundException('Plantinha ainda não existe — abra a tela do pet primeiro');
+        throw new NotFoundException('Pet ainda não existe — abra a tela do pet primeiro');
       }
 
       this.applyDecay(pet);
 
       if (isWater && pet.waterLevel >= 100) {
-        throw new BadRequestException('A plantinha não está com sede agora!');
+        throw new BadRequestException('Seu pet não está com sede agora!');
       }
       if (isFood && pet.nutritionLevel >= 100) {
-        throw new BadRequestException('A plantinha está satisfeita!');
+        throw new BadRequestException('Seu pet está satisfeito!');
       }
 
       if (isWater) {
@@ -382,7 +449,8 @@ export class PetService {
       message:
         result.item.type === ShopItemType.WATER
           ? `${result.item.emoji} Glub glub! Sua plantinha agradece 💚`
-          : `${result.item.emoji} Nham! Sua plantinha cresceu um pouquinho 💚`,
+          ? `${result.item.emoji} Glub glub! Seu pet agradece 💚`
+          : `${result.item.emoji} Nham! Seu pet ficou mais animado 💚`,
     };
   }
 
@@ -401,7 +469,7 @@ export class PetService {
       }
       const type = inventory.shopItem.type;
       if (type === ShopItemType.WATER || type === ShopItemType.FOOD) {
-        throw new BadRequestException('Consumíveis não são equipáveis — use-os na planta');
+        throw new BadRequestException('Consumíveis não são equipáveis — use-os no pet');
       }
 
       // No máximo um cosmético equipado por tipo
@@ -484,7 +552,7 @@ export class PetService {
     });
   }
 
-  // ============ ECONOMIA BOTÂNICA (gestão pelo responsável) ============
+  // ============ LOJA DO PET (gestão pelo responsável) ============
 
   async createShopItem(familyId: string, dto: CreateShopItemDto) {
     const isConsumable =
