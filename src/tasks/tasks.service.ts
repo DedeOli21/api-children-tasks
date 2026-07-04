@@ -15,11 +15,16 @@ import {
   User,
   HistoryEntry,
   HistoryType,
+  PetDropSourceType,
 } from '../entities';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { StreaksService } from '../streaks/streaks.service';
 import { EventsService } from '../events/events.service';
+import {
+  PetRewardResult,
+  PetRewardsService,
+} from '../pet-rewards/pet-rewards.service';
 
 @Injectable()
 export class TasksService {
@@ -35,6 +40,7 @@ export class TasksService {
     @Inject(forwardRef(() => StreaksService))
     private streaksService: StreaksService,
     private eventsService: EventsService,
+    private petRewardsService: PetRewardsService,
     private dataSource: DataSource,
   ) {}
 
@@ -217,6 +223,8 @@ export class TasksService {
 
     // Mudança de status, crédito e histórico na mesma transação:
     // ou a criança recebe tudo, ou nada muda.
+    let petReward: PetRewardResult | null = null;
+
     await this.dataSource.transaction(async (manager) => {
       log.status = TaskExecutionStatus.APPROVED;
       log.approvedAt = new Date();
@@ -242,6 +250,13 @@ export class TasksService {
           starsChange: starsToAdd,
         }),
       );
+
+      petReward = await this.petRewardsService.awardForCompletion(manager, {
+        familyId: parentId,
+        child,
+        sourceType: PetDropSourceType.DAILY_TASK,
+        sourceId: log.id,
+      });
     });
 
     return {
@@ -253,6 +268,7 @@ export class TasksService {
       starsEarned: starsToAdd,
       multiplier: streakMultiplier,
       eventMultiplier,
+      petReward,
       message: `Tarefa "${taskTitle}" aprovada! +${starsToAdd} estrela(s) para ${child.name}`,
     };
   }

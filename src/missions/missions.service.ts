@@ -13,11 +13,16 @@ import {
   UserRole,
   HistoryEntry,
   HistoryType,
+  PetDropSourceType,
 } from '../entities';
 import { NotificationType } from '../entities';
 import { AccessControlService } from '../auth/access-control.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventsService } from '../events/events.service';
+import {
+  PetRewardResult,
+  PetRewardsService,
+} from '../pet-rewards/pet-rewards.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { AllocateMissionDto } from './dto/allocate-mission.dto';
 
@@ -33,6 +38,7 @@ export class MissionsService {
     private accessControl: AccessControlService,
     private notificationsService: NotificationsService,
     private eventsService: EventsService,
+    private petRewardsService: PetRewardsService,
     private dataSource: DataSource,
   ) {}
 
@@ -199,6 +205,7 @@ export class MissionsService {
     const starsToAdd = mission.starsReward * eventMultiplier;
     const teacherName = mission.createdBy?.name ?? 'Professor(a)';
 
+    let petReward: PetRewardResult | null = null;
     const currentStars = await this.dataSource.transaction(async (manager) => {
       mission.status = MissionStatus.APPROVED;
       mission.approvedAt = new Date();
@@ -224,6 +231,16 @@ export class MissionsService {
         }),
       );
 
+      petReward = await this.petRewardsService.awardForCompletion(manager, {
+        familyId: parent.id,
+        child,
+        sourceType:
+          mission.createdBy?.role === UserRole.THERAPIST
+            ? PetDropSourceType.THERAPIST_MISSION
+            : PetDropSourceType.TEACHER_MISSION,
+        sourceId: mission.id,
+      });
+
       return child.currentStars;
     });
 
@@ -232,6 +249,7 @@ export class MissionsService {
       currentStars,
       starsEarned: starsToAdd,
       eventMultiplier,
+      petReward,
       message: `Missão "${mission.title}" aprovada! +${starsToAdd} estrela(s)`,
     };
   }

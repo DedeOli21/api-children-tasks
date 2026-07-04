@@ -84,6 +84,7 @@ describe('Task Templates v2 (e2e)', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.status).toBe('completed');
+        expect(body.streak).toBe(1);
       });
 
     const pending = await request(app.getHttpServer())
@@ -101,6 +102,11 @@ describe('Task Templates v2 (e2e)', () => {
 
     expect(approved.body.starsEarned).toBe(3);
     expect(approved.body.currentStars).toBe(3);
+    expect(approved.body.petReward.progress).toMatchObject({
+      xp: 100,
+      level: 2,
+      animationState: 'happy',
+    });
 
     const stars = await request(app.getHttpServer())
       .get('/api/stars')

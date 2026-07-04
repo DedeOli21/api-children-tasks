@@ -4,6 +4,7 @@ import { TasksService } from './tasks.service';
 import { TasksController } from './tasks.controller';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
+import { PetRewardsModule } from '../pet-rewards/pet-rewards.module';
 import { Task, DailyLog, User, HistoryEntry } from '../entities';
 import { StreaksModule } from '../streaks/streaks.module';
 
@@ -13,6 +14,7 @@ import { StreaksModule } from '../streaks/streaks.module';
     forwardRef(() => StreaksModule),
     AuthModule,
     EventsModule,
+    PetRewardsModule,
   ],
   controllers: [TasksController],
   providers: [TasksService],

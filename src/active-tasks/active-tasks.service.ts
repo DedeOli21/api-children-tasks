@@ -11,11 +11,17 @@ import {
   ActiveTaskStatus,
   HistoryEntry,
   HistoryType,
+  PetDropSourceType,
   User,
   UserRole,
 } from '../entities';
 import { AccessControlService } from '../auth/access-control.service';
 import { EventsService } from '../events/events.service';
+import {
+  PetRewardResult,
+  PetRewardsService,
+} from '../pet-rewards/pet-rewards.service';
+import { StreaksService } from '../streaks/streaks.service';
 
 @Injectable()
 export class ActiveTasksService {
@@ -24,6 +30,8 @@ export class ActiveTasksService {
     private activeTaskRepository: Repository<ActiveTask>,
     private accessControl: AccessControlService,
     private eventsService: EventsService,
+    private petRewardsService: PetRewardsService,
+    private streaksService: StreaksService,
     private dataSource: DataSource,
   ) {}
 
@@ -81,8 +89,10 @@ export class ActiveTasksService {
     task.status = ActiveTaskStatus.COMPLETED;
     task.completedAt = new Date();
     const saved = await this.activeTaskRepository.save(task);
+    const streakInfo = await this.streaksService.updateStreak(task.childId);
     return {
       ...this.toPublic(saved),
+      streak: streakInfo.streak,
       message: `Tarefa "${task.title}" enviada para aprovação!`,
     };
   }
@@ -123,6 +133,7 @@ export class ActiveTasksService {
       await this.eventsService.activeMultiplier(parent.id);
     const starsToAdd = task.rewardStars * eventMultiplier;
 
+    let petReward: PetRewardResult | null = null;
     const currentStars = await this.dataSource.transaction(async (manager) => {
       task.status = ActiveTaskStatus.APPROVED;
       task.approvedAt = new Date();
@@ -149,6 +160,13 @@ export class ActiveTasksService {
         }),
       );
 
+      petReward = await this.petRewardsService.awardForCompletion(manager, {
+        familyId: parent.id,
+        child,
+        sourceType: PetDropSourceType.DAILY_TASK,
+        sourceId: task.id,
+      });
+
       return child.currentStars;
     });
 
@@ -157,6 +175,7 @@ export class ActiveTasksService {
       currentStars,
       starsEarned: starsToAdd,
       eventMultiplier,
+      petReward,
       message: `Tarefa "${task.title}" aprovada! +${starsToAdd} estrela(s)`,
     };
   }

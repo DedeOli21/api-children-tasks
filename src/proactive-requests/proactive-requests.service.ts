@@ -11,6 +11,7 @@ import {
   HistoryEntry,
   HistoryType,
   NotificationType,
+  PetDropSourceType,
   ProactiveCategoryIcon,
   ProactiveRequest,
   ProactiveRequestStatus,
@@ -18,6 +19,10 @@ import {
   UserRole,
 } from '../entities';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  PetRewardResult,
+  PetRewardsService,
+} from '../pet-rewards/pet-rewards.service';
 import { CreateProactiveRequestDto } from './dto/create-proactive-request.dto';
 import { ReviewProactiveRequestDto } from './dto/review-proactive-request.dto';
 
@@ -35,6 +40,7 @@ export class ProactiveRequestsService {
     private userRepository: Repository<User>,
     private accessControl: AccessControlService,
     private notificationsService: NotificationsService,
+    private petRewardsService: PetRewardsService,
     private dataSource: DataSource,
   ) {}
 
@@ -148,6 +154,7 @@ export class ProactiveRequestsService {
       child.currentStars += finalStars;
       await manager.save(child);
 
+      let petReward: PetRewardResult | null = null;
       if (finalStars > 0) {
         await manager.save(
           manager.create(HistoryEntry, {
@@ -157,12 +164,20 @@ export class ProactiveRequestsService {
             starsChange: finalStars,
           }),
         );
+
+        petReward = await this.petRewardsService.awardForCompletion(manager, {
+          familyId: parent.id,
+          child,
+          sourceType: PetDropSourceType.PROACTIVE_REQUEST,
+          sourceId: request.id,
+        });
       }
 
       return {
         ...this.toPublicRequest({ ...request, child, reviewedBy: parent }),
         currentStars: child.currentStars,
         starsEarned: finalStars,
+        petReward,
         message:
           status === ProactiveRequestStatus.APPROVED
             ? `Super Iniciativa aprovada! +${finalStars} estrela(s) para ${child.name}`

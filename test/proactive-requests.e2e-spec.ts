@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import request from 'supertest';
 import { createTestApp } from './utils/test-app';
 import {
@@ -7,12 +8,25 @@ import {
   login,
   registerParent,
 } from './utils/fixtures';
+import {
+  PetAttachmentSlot,
+  PetDrop,
+  PetDropRule,
+  PetDropSourceType,
+  PetInventoryItem,
+  PetItem,
+  PetItemRarity,
+  PetItemType,
+} from '../src/entities';
 
 describe('ProactiveRequests (e2e)', () => {
   let app: INestApplication;
+  let dataSource: DataSource;
+  let seq = 0;
 
   beforeAll(async () => {
     app = await createTestApp();
+    dataSource = app.get(DataSource);
   });
 
   afterAll(async () => {
@@ -42,6 +56,33 @@ describe('ProactiveRequests (e2e)', () => {
     return res.body;
   }
 
+  async function seedProactiveDrop() {
+    seq += 1;
+    const petItem = await dataSource.getRepository(PetItem).save(
+      dataSource.getRepository(PetItem).create({
+        key: `proactive-drop-${seq}`,
+        name: `Iniciativa ${seq}`,
+        type: PetItemType.EFFECT,
+        attachmentSlot: PetAttachmentSlot.EFFECT,
+        attachmentKey: `initiative_sparkle_${seq}`,
+        previewEmoji: '✨',
+        rarity: PetItemRarity.RARE,
+        active: true,
+      }),
+    );
+
+    await dataSource.getRepository(PetDropRule).save(
+      dataSource.getRepository(PetDropRule).create({
+        sourceType: PetDropSourceType.PROACTIVE_REQUEST,
+        rarity: PetItemRarity.RARE,
+        chanceBasisPoints: 10_000,
+        active: true,
+      }),
+    );
+
+    return petItem;
+  }
+
   it('criança envia uma Super Iniciativa e responsável vê na fila pendente', async () => {
     const { parent, child, childAuth } = await setupFamily();
 
@@ -62,6 +103,7 @@ describe('ProactiveRequests (e2e)', () => {
   });
 
   it('responsável aprova com valor sugerido e credita estrelas uma única vez', async () => {
+    const expectedItem = await seedProactiveDrop();
     const { parent, child, childAuth } = await setupFamily();
     const created = await createProactiveRequest(childAuth.token);
 
@@ -74,6 +116,27 @@ describe('ProactiveRequests (e2e)', () => {
     expect(approved.body.finalStars).toBe(4);
     expect(approved.body.starsEarned).toBe(4);
     expect(approved.body.currentStars).toBe(4);
+    expect(approved.body.petReward.drop).toMatchObject({
+      dropped: true,
+      item: {
+        id: expectedItem.id,
+        key: expectedItem.key,
+      },
+    });
+
+    const inventory = await dataSource.getRepository(PetInventoryItem).findOne({
+      where: { childId: child.id, petItemId: expectedItem.id },
+    });
+    expect(inventory).toMatchObject({ acquisitionSource: 'drop' });
+
+    const drop = await dataSource.getRepository(PetDrop).findOne({
+      where: {
+        childId: child.id,
+        petItemId: expectedItem.id,
+        sourceType: PetDropSourceType.PROACTIVE_REQUEST,
+      },
+    });
+    expect(drop?.sourceId).toBe(created.id);
 
     await request(app.getHttpServer())
       .patch(`/api/proactive-requests/${created.id}/approve`)

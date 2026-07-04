@@ -5,6 +5,7 @@ import { MissionsController } from './missions.controller';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PetRewardsModule } from '../pet-rewards/pet-rewards.module';
 import { Mission, User, HistoryEntry } from '../entities';
 
 @Module({
@@ -13,6 +14,7 @@ import { Mission, User, HistoryEntry } from '../entities';
     AuthModule,
     EventsModule,
     NotificationsModule,
+    PetRewardsModule,
   ],
   controllers: [MissionsController],
   providers: [MissionsService],

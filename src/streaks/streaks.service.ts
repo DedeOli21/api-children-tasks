@@ -1,16 +1,19 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Not, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, Not, IsNull, Repository } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import {
   User,
   UserRole,
   DailyLog,
   Task,
+  ActiveTask,
+  ActiveTaskStatus,
   HistoryEntry,
   HistoryType,
   TaskExecutionStatus,
   VirtualPet,
+  PetAnimationState,
   NotificationType,
 } from '../entities';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -72,6 +75,65 @@ export class StreaksService {
     if (streak >= 6) return 3;
     if (streak >= 2) return 2;
     return 1;
+  }
+
+  private petProgressForStreak(streak: number) {
+    const safeStreak = Math.max(0, streak);
+    const level = Math.min(100, safeStreak + 1);
+    return {
+      xp: safeStreak * 100,
+      level,
+      xpToNextLevel: level >= 100 ? 0 : 100,
+    };
+  }
+
+  private applyPetProgress(
+    pet: VirtualPet,
+    user: User,
+    forcedState?: PetAnimationState,
+  ) {
+    const progress = this.petProgressForStreak(user.currentStreak);
+    pet.xp = progress.xp;
+    pet.level = progress.level;
+    pet.xpToNextLevel = progress.xpToNextLevel;
+    pet.animationState =
+      forcedState ??
+      (pet.sickSince
+        ? PetAnimationState.SAD
+        : user.currentStreak > 0
+          ? PetAnimationState.HAPPY
+          : PetAnimationState.IDLE);
+  }
+
+  private async syncPetProgress(user: User, forcedState?: PetAnimationState) {
+    const petRepository = this.dataSource.getRepository(VirtualPet);
+    let pet = await petRepository.findOne({ where: { childId: user.id } });
+    if (!pet) {
+      pet = petRepository.create({
+        childId: user.id,
+        lastDecayAt: new Date(),
+      });
+    }
+    this.applyPetProgress(pet, user, forcedState);
+    await petRepository.save(pet);
+  }
+
+  private async syncPetProgressWith(
+    manager: EntityManager,
+    user: User,
+    forcedState?: PetAnimationState,
+  ) {
+    let pet = await manager.findOne(VirtualPet, {
+      where: { childId: user.id },
+    });
+    if (!pet) {
+      pet = manager.create(VirtualPet, {
+        childId: user.id,
+        lastDecayAt: new Date(),
+      });
+    }
+    this.applyPetProgress(pet, user, forcedState);
+    await manager.save(pet);
   }
 
   private getPlantState(user: User) {
@@ -152,11 +214,9 @@ export class StreaksService {
   async hasCompletedAllTasks(userId: string, date: string): Promise<boolean> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     // Considera apenas as tarefas da família da criança
-    const activeTasks = await this.taskRepository.find({
+    const legacyTasks = await this.taskRepository.find({
       where: { active: true, familyId: user?.parentId ?? '' },
     });
-
-    if (activeTasks.length === 0) return true;
 
     const dailyLogs = await this.dailyLogRepository.find({
       where: { userId, date },
@@ -168,7 +228,19 @@ export class StreaksService {
         .map((log) => log.taskId),
     );
 
-    return activeTasks.every((task) => completedTaskIds.has(task.id));
+    const legacyComplete = legacyTasks.every((task) =>
+      completedTaskIds.has(task.id),
+    );
+
+    const scheduledTasks = await this.dataSource.getRepository(ActiveTask).find({
+      where: { childId: userId, date },
+    });
+    const scheduledComplete = scheduledTasks.every(
+      (task) => task.status !== ActiveTaskStatus.PENDING,
+    );
+
+    if (legacyTasks.length === 0 && scheduledTasks.length === 0) return true;
+    return legacyComplete && scheduledComplete;
   }
 
   async hasReceivedPenalty(userId: string, date: string): Promise<boolean> {
@@ -275,13 +347,20 @@ export class StreaksService {
         }
 
         // 3ª punição: a planta adoece até um dia fechar completo de novo
-        const pet = await manager.findOne(VirtualPet, {
+        let pet = await manager.findOne(VirtualPet, {
           where: { childId: user.id },
         });
-        if (pet && !pet.sickSince) {
-          pet.sickSince = brokenOn;
-          await manager.save(pet);
+        if (!pet) {
+          pet = manager.create(VirtualPet, {
+            childId: user.id,
+            lastDecayAt: new Date(),
+          });
         }
+        if (!pet.sickSince) {
+          pet.sickSince = brokenOn;
+        }
+        this.applyPetProgress(pet, user, PetAnimationState.SAD);
+        await manager.save(pet);
 
         await this.notificationsService.notifyWith(
           manager,
@@ -307,6 +386,9 @@ export class StreaksService {
 
       // Persiste streak/freezes/saldo juntos — tudo ou nada
       await manager.save(user);
+      if (!brokenOn) {
+        await this.syncPetProgressWith(manager, user);
+      }
     });
 
     return frozenDays.length;
@@ -316,7 +398,10 @@ export class StreaksService {
   private async curePet(childId: string): Promise<void> {
     await this.dataSource
       .getRepository(VirtualPet)
-      .update({ childId, sickSince: Not(IsNull()) }, { sickSince: null });
+      .update(
+        { childId, sickSince: Not(IsNull()) },
+        { sickSince: null, animationState: PetAnimationState.HAPPY },
+      );
   }
 
   /**
@@ -344,6 +429,7 @@ export class StreaksService {
         user.lastStreakDate = null;
         user.streakBrokenAt = today;
         await this.userRepository.save(user);
+        await this.syncPetProgress(user, PetAnimationState.SAD);
       }
       return { streak: 0, multiplier: 1, wasReset, freezesUsed };
     }
@@ -375,6 +461,7 @@ export class StreaksService {
       user.longestStreak = user.currentStreak;
     }
     await this.userRepository.save(user);
+    await this.syncPetProgress(user, PetAnimationState.HAPPY);
 
     // Dia completo cura a planta doente (penalidade orgânica revertida)
     await this.curePet(userId);
@@ -400,6 +487,7 @@ export class StreaksService {
       user.lastStreakDate = null;
       user.streakBrokenAt = this.getTodayDate();
       await this.userRepository.save(user);
+      await this.syncPetProgress(user, PetAnimationState.SAD);
     }
   }
 
