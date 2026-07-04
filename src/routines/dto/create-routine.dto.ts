@@ -7,8 +7,13 @@ import {
   IsNumber,
   IsIn,
 } from 'class-validator';
+import { RecurrenceDay } from '../../entities';
 
 export class CreateRoutineDto {
+  @IsUUID('4')
+  @IsOptional()
+  childId?: string;
+
   @IsString()
   @IsNotEmpty({ message: 'Nome é obrigatório' })
   name: string;
@@ -37,8 +42,12 @@ export class CreateRoutineDto {
   scheduledTime?: string; // Formato: "HH:mm"
 
   @IsArray()
+  @IsIn(Object.values(RecurrenceDay), { each: true })
+  @IsOptional()
+  recurrenceDays?: RecurrenceDay[];
+
+  @IsArray()
   @IsUUID('4', { each: true })
   @IsOptional()
   taskIds?: string[];
 }
-

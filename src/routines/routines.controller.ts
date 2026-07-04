@@ -62,17 +62,34 @@ export class RoutinesController {
 
   @Post()
   @Roles(UserRole.PARENT)
-  create(@CurrentUser() user: User, @Body() createRoutineDto: CreateRoutineDto) {
+  async create(
+    @CurrentUser() user: User,
+    @Body() createRoutineDto: CreateRoutineDto,
+  ) {
+    if (createRoutineDto.childId) {
+      const child = await this.accessControl.resolveChild(
+        user,
+        createRoutineDto.childId,
+      );
+      createRoutineDto = { ...createRoutineDto, childId: child.id };
+    }
     return this.routinesService.create(createRoutineDto, user.id);
   }
 
   @Patch(':id')
   @Roles(UserRole.PARENT)
-  update(
+  async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() updateRoutineDto: UpdateRoutineDto,
   ) {
+    if (updateRoutineDto.childId) {
+      const child = await this.accessControl.resolveChild(
+        user,
+        updateRoutineDto.childId,
+      );
+      updateRoutineDto = { ...updateRoutineDto, childId: child.id };
+    }
     return this.routinesService.update(id, updateRoutineDto, user.id);
   }
 

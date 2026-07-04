@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, IsNull } from 'typeorm';
 import { Routine } from '../entities/routine.entity';
 import { Task, DailyLog, RoutineLog, TaskExecutionStatus } from '../entities';
 import { CreateRoutineDto } from './dto/create-routine.dto';
@@ -23,9 +23,23 @@ export class RoutinesService {
     return new Date().toISOString().split('T')[0];
   }
 
+  private visibleRoutineWhere(id: string, childId: string, familyId: string) {
+    return [
+      { id, familyId, childId },
+      { id, familyId, childId: IsNull() },
+    ];
+  }
+
+  private visibleRoutinesWhere(childId: string, familyId: string) {
+    return [
+      { active: true, familyId, childId },
+      { active: true, familyId, childId: IsNull() },
+    ];
+  }
+
   async findAll(userId: string, familyId: string) {
     const routines = await this.routineRepository.find({
-      where: { active: true, familyId },
+      where: this.visibleRoutinesWhere(userId, familyId),
       relations: ['tasks'],
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
@@ -69,7 +83,7 @@ export class RoutinesService {
 
   async findOne(id: string, userId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id, familyId },
+      where: this.visibleRoutineWhere(id, userId, familyId),
       relations: ['tasks'],
     });
 
@@ -103,9 +117,14 @@ export class RoutinesService {
   }
 
   async create(createRoutineDto: CreateRoutineDto, familyId: string) {
-    const { taskIds, ...routineData } = createRoutineDto;
+    const { taskIds, name, recurrenceDays, ...routineData } = createRoutineDto;
 
-    const routine = this.routineRepository.create({ ...routineData, familyId });
+    const routine = this.routineRepository.create({
+      ...routineData,
+      familyId,
+      name: name.trim(),
+      recurrenceDays: recurrenceDays ?? [],
+    });
 
     if (taskIds && taskIds.length > 0) {
       const tasks = await this.taskRepository.find({
@@ -130,6 +149,9 @@ export class RoutinesService {
     const { taskIds, ...routineData } = updateRoutineDto;
 
     Object.assign(routine, routineData);
+    if (updateRoutineDto.name !== undefined) {
+      routine.name = updateRoutineDto.name.trim();
+    }
 
     if (taskIds !== undefined) {
       if (taskIds.length > 0) {
@@ -203,7 +225,7 @@ export class RoutinesService {
 
   async complete(routineId: string, userId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id: routineId, familyId },
+      where: this.visibleRoutineWhere(routineId, userId, familyId),
     });
 
     if (!routine) {
@@ -242,7 +264,7 @@ export class RoutinesService {
 
   async uncomplete(routineId: string, userId: string, familyId: string) {
     const routine = await this.routineRepository.findOne({
-      where: { id: routineId, familyId },
+      where: this.visibleRoutineWhere(routineId, userId, familyId),
     });
 
     if (!routine) {
@@ -272,7 +294,7 @@ export class RoutinesService {
     const today = this.getTodayDate();
 
     const routines = await this.routineRepository.find({
-      where: { active: true, familyId },
+      where: this.visibleRoutinesWhere(userId, familyId),
     });
 
     const todayLogs = await this.routineLogRepository.find({
@@ -290,4 +312,3 @@ export class RoutinesService {
     };
   }
 }
-

@@ -6,10 +6,30 @@ import {
   UpdateDateColumn,
   ManyToMany,
   JoinTable,
+  ManyToOne,
+  JoinColumn,
+  Index,
 } from 'typeorm';
 import { Task } from './task.entity';
+import { User } from './user.entity';
+import { RecurrenceDay } from './task-template.entity';
+
+const recurrenceDaysColumn =
+  process.env.DATABASE_TYPE === 'postgres'
+    ? ({
+        name: 'recurrence_days',
+        type: 'text' as const,
+        array: true,
+        default: () => "'{}'",
+      } as const)
+    : ({
+        name: 'recurrence_days',
+        type: 'simple-json' as const,
+        default: '[]',
+      } as const);
 
 @Entity('routines')
+@Index(['familyId', 'childId'])
 export class Routine {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -17,6 +37,13 @@ export class Routine {
   // Família dona da rotina (id do responsável)
   @Column({ name: 'family_id', type: 'text', nullable: true })
   familyId: string | null;
+
+  @Column({ name: 'child_id', type: 'text', nullable: true })
+  childId: string | null;
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'child_id' })
+  child: User | null;
 
   @Column()
   name: string;
@@ -39,6 +66,9 @@ export class Routine {
   @Column({ name: 'scheduled_time', nullable: true })
   scheduledTime: string; // Formato: "HH:mm" (ex: "08:30")
 
+  @Column(recurrenceDaysColumn)
+  recurrenceDays: RecurrenceDay[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
@@ -53,4 +83,3 @@ export class Routine {
   })
   tasks: Task[];
 }
-

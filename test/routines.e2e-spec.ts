@@ -40,6 +40,68 @@ describe('Routines & Routine Templates (e2e)', () => {
     expect(res.body[0].completedToday).toBe(false);
   });
 
+  it('responsável cria rotina sem pontos para uma criança e com dias da semana', async () => {
+    const { token } = await registerParent(app);
+    const firstChild = await createChild(app, token, { name: 'Filho A' });
+    const secondChild = await createChild(app, token, { name: 'Filho B' });
+    const childAuth = await login(
+      app,
+      firstChild.username,
+      firstChild.password,
+    );
+
+    const routine = await request(app.getHttpServer())
+      .post('/api/routines')
+      .set(authHeader(token))
+      .send({
+        childId: firstChild.child.id,
+        name: 'Escovar dentes',
+        emoji: '🦷',
+        timeOfDay: 'morning',
+        scheduledTime: '07:30',
+        recurrenceDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+      })
+      .expect(201);
+
+    expect(routine.body.childId).toBe(firstChild.child.id);
+    expect(routine.body.recurrenceDays).toEqual([
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+    ]);
+    expect(routine.body.rewardStars).toBeUndefined();
+
+    const firstList = await request(app.getHttpServer())
+      .get('/api/routines')
+      .set(authHeader(token))
+      .query({ childId: firstChild.child.id })
+      .expect(200);
+    expect(firstList.body.map((item) => item.id)).toContain(routine.body.id);
+
+    const secondList = await request(app.getHttpServer())
+      .get('/api/routines')
+      .set(authHeader(token))
+      .query({ childId: secondChild.child.id })
+      .expect(200);
+    expect(secondList.body.map((item) => item.id)).not.toContain(
+      routine.body.id,
+    );
+
+    await request(app.getHttpServer())
+      .patch(`/api/routines/${routine.body.id}/complete`)
+      .set(authHeader(childAuth.token))
+      .expect(200);
+
+    const stars = await request(app.getHttpServer())
+      .get('/api/stars')
+      .set(authHeader(token))
+      .query({ childId: firstChild.child.id })
+      .expect(200);
+    expect(stars.body.currentStars).toBe(0);
+  });
+
   it('criança completa e desmarca a rotina do dia', async () => {
     const { token } = await registerParent(app);
     const { username, password } = await createChild(app, token);
