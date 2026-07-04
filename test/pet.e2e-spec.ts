@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { createTestApp } from './utils/test-app';
 import {
   registerParent,
@@ -13,12 +13,19 @@ import {
 } from './utils/fixtures';
 import {
   PetAttachmentSlot,
+  FeatureFlag,
+  PetDropRule,
+  PetDropSourceType,
   PetInventoryItem,
   PetItem,
   PetItemAcquisitionSource,
   PetItemRarity,
   PetItemType,
 } from '../src/entities';
+import {
+  DEFAULT_PET_ITEM_KEYS,
+  PetCatalogSeedService,
+} from '../src/pet-rewards/pet-catalog-seed.service';
 
 describe('Pet Virtual (e2e)', () => {
   let app: INestApplication;
@@ -269,6 +276,78 @@ describe('Pet Virtual (e2e)', () => {
         }),
       ]),
     );
+  });
+
+  it('semeia catalogo padrao de itens e regras de drop do Pet sem duplicar', async () => {
+    const seeder = app.get(PetCatalogSeedService);
+
+    const firstRun = await seeder.ensureCatalog();
+    const secondRun = await seeder.ensureCatalog();
+
+    expect(firstRun.createdItems).toBeGreaterThan(0);
+    expect(firstRun.createdRules).toBeGreaterThan(0);
+    expect(secondRun.createdItems).toBe(0);
+    expect(secondRun.createdRules).toBe(0);
+
+    const items = await dataSource.getRepository(PetItem).find({
+      where: { key: In([...DEFAULT_PET_ITEM_KEYS]) },
+    });
+    expect(items).toHaveLength(DEFAULT_PET_ITEM_KEYS.length);
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'species_cat_orange',
+          type: PetItemType.SPECIES,
+          attachmentSlot: PetAttachmentSlot.SPECIES,
+          attachmentKey: 'cat_orange',
+          assetUrl: '/assets/cat_idle_happy.jpg',
+        }),
+        expect.objectContaining({
+          key: 'background_backyard',
+          type: PetItemType.BACKGROUND,
+          attachmentKey: 'backyard',
+          assetUrl: '/assets/bg_backyard.jpg',
+        }),
+        expect.objectContaining({
+          key: 'premium_cozy_outfit',
+          isPremium: true,
+        }),
+      ]),
+    );
+
+    const rules = await dataSource.getRepository(PetDropRule).find({
+      where: {
+        sourceType: In([
+          PetDropSourceType.DAILY_TASK,
+          PetDropSourceType.EXTRA_TASK,
+          PetDropSourceType.TEACHER_MISSION,
+          PetDropSourceType.THERAPIST_MISSION,
+          PetDropSourceType.PROACTIVE_REQUEST,
+        ]),
+      },
+    });
+    expect(rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: PetDropSourceType.DAILY_TASK,
+          rarity: PetItemRarity.COMMON,
+          chanceBasisPoints: 500,
+        }),
+        expect.objectContaining({
+          sourceType: PetDropSourceType.THERAPIST_MISSION,
+          rarity: PetItemRarity.RARE,
+          chanceBasisPoints: 2000,
+        }),
+      ]),
+    );
+
+    const premiumFlag = await dataSource.getRepository(FeatureFlag).findOne({
+      where: { key: 'pet_premium_cosmetics' },
+    });
+    expect(premiumFlag).toMatchObject({
+      premiumGate: true,
+      enabled: false,
+    });
   });
 
   it('RBAC: responsável observa o pet; professor não acessa; criança não gerencia a loja', async () => {

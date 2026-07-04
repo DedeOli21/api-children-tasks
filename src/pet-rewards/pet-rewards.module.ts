@@ -9,6 +9,7 @@ import {
   PetItem,
   VirtualPet,
 } from '../entities';
+import { PetCatalogSeedService } from './pet-catalog-seed.service';
 import { PetRewardsService } from './pet-rewards.service';
 
 @Module({
@@ -23,7 +24,7 @@ import { PetRewardsService } from './pet-rewards.service';
       VirtualPet,
     ]),
   ],
-  providers: [PetRewardsService],
-  exports: [PetRewardsService],
+  providers: [PetCatalogSeedService, PetRewardsService],
+  exports: [PetCatalogSeedService, PetRewardsService],
 })
 export class PetRewardsModule {}
