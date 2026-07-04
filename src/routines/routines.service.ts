@@ -1,8 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, IsNull } from 'typeorm';
 import { Routine } from '../entities/routine.entity';
-import { Task, DailyLog, RoutineLog, TaskExecutionStatus } from '../entities';
+import {
+  DailyLog,
+  RecurrenceDay,
+  RoutineLog,
+  Task,
+  TaskExecutionStatus,
+} from '../entities';
 import { CreateRoutineDto } from './dto/create-routine.dto';
 import { UpdateRoutineDto } from './dto/update-routine.dto';
 
@@ -20,7 +26,30 @@ export class RoutinesService {
   ) {}
 
   private getTodayDate(): string {
-    return new Date().toISOString().split('T')[0];
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+    }).format(new Date());
+  }
+
+  private getWeekday(date: string): RecurrenceDay {
+    const day = new Date(`${date}T12:00:00-03:00`).getDay();
+    return [
+      RecurrenceDay.SUNDAY,
+      RecurrenceDay.MONDAY,
+      RecurrenceDay.TUESDAY,
+      RecurrenceDay.WEDNESDAY,
+      RecurrenceDay.THURSDAY,
+      RecurrenceDay.FRIDAY,
+      RecurrenceDay.SATURDAY,
+    ][day];
+  }
+
+  private isScheduledForDate(routine: Routine, date: string) {
+    const recurrenceDays = routine.recurrenceDays ?? [];
+    return (
+      recurrenceDays.length === 0 ||
+      recurrenceDays.includes(this.getWeekday(date))
+    );
   }
 
   private visibleRoutineWhere(id: string, childId: string, familyId: string) {
@@ -37,7 +66,11 @@ export class RoutinesService {
     ];
   }
 
-  async findAll(userId: string, familyId: string) {
+  async findAll(
+    userId: string,
+    familyId: string,
+    options: { todayOnly?: boolean } = {},
+  ) {
     const routines = await this.routineRepository.find({
       where: this.visibleRoutinesWhere(userId, familyId),
       relations: ['tasks'],
@@ -45,6 +78,9 @@ export class RoutinesService {
     });
 
     const today = this.getTodayDate();
+    const visibleRoutines = options.todayOnly
+      ? routines.filter((routine) => this.isScheduledForDate(routine, today))
+      : routines;
 
     // Buscar logs de rotinas de hoje para o usuário
     const todayRoutineLogs = await this.routineLogRepository.find({
@@ -67,7 +103,7 @@ export class RoutinesService {
     );
 
     // Adicionar status de completado em cada rotina e suas tarefas
-    return routines.map((routine) => ({
+    return visibleRoutines.map((routine) => ({
       ...routine,
       completedToday: completedRoutineIds.has(routine.id),
       tasks: routine.tasks.map((task) => ({
@@ -233,6 +269,9 @@ export class RoutinesService {
     }
 
     const today = this.getTodayDate();
+    if (!this.isScheduledForDate(routine, today)) {
+      throw new BadRequestException('Rotina não está agendada para hoje');
+    }
 
     // Verificar se já existe um log para hoje
     let log = await this.routineLogRepository.findOne({
@@ -272,6 +311,9 @@ export class RoutinesService {
     }
 
     const today = this.getTodayDate();
+    if (!this.isScheduledForDate(routine, today)) {
+      throw new BadRequestException('Rotina não está agendada para hoje');
+    }
 
     // Buscar o log de hoje
     const log = await this.routineLogRepository.findOne({
@@ -296,17 +338,25 @@ export class RoutinesService {
     const routines = await this.routineRepository.find({
       where: this.visibleRoutinesWhere(userId, familyId),
     });
+    const todayRoutines = routines.filter((routine) =>
+      this.isScheduledForDate(routine, today),
+    );
+    const todayRoutineIds = new Set(
+      todayRoutines.map((routine) => routine.id),
+    );
 
     const todayLogs = await this.routineLogRepository.find({
       where: { userId, date: today },
     });
 
     const completedRoutineIds = new Set(
-      todayLogs.filter((log) => log.completed).map((log) => log.routineId),
+      todayLogs
+        .filter((log) => log.completed && todayRoutineIds.has(log.routineId))
+        .map((log) => log.routineId),
     );
 
     return {
-      total: routines.length,
+      total: todayRoutines.length,
       completed: completedRoutineIds.size,
       completedIds: Array.from(completedRoutineIds),
     };

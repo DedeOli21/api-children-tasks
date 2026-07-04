@@ -10,6 +10,15 @@ import {
 
 describe('Routines & Routine Templates (e2e)', () => {
   let app: INestApplication;
+  const weekDays = [
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+  ];
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -18,6 +27,18 @@ describe('Routines & Routine Templates (e2e)', () => {
   afterAll(async () => {
     await app.close();
   });
+
+  function getTodayRecurrenceDay() {
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+    }).format(new Date());
+    return weekDays[new Date(`${today}T12:00:00-03:00`).getDay()];
+  }
+
+  function getDifferentRecurrenceDay() {
+    const todayIndex = weekDays.indexOf(getTodayRecurrenceDay());
+    return weekDays[(todayIndex + 1) % weekDays.length];
+  }
 
   it('responsável cria uma rotina e ela aparece para a criança', async () => {
     const { token } = await registerParent(app);
@@ -44,6 +65,7 @@ describe('Routines & Routine Templates (e2e)', () => {
     const { token } = await registerParent(app);
     const firstChild = await createChild(app, token, { name: 'Filho A' });
     const secondChild = await createChild(app, token, { name: 'Filho B' });
+    const today = getTodayRecurrenceDay();
     const childAuth = await login(
       app,
       firstChild.username,
@@ -59,18 +81,12 @@ describe('Routines & Routine Templates (e2e)', () => {
         emoji: '🦷',
         timeOfDay: 'morning',
         scheduledTime: '07:30',
-        recurrenceDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+        recurrenceDays: [today],
       })
       .expect(201);
 
     expect(routine.body.childId).toBe(firstChild.child.id);
-    expect(routine.body.recurrenceDays).toEqual([
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-    ]);
+    expect(routine.body.recurrenceDays).toEqual([today]);
     expect(routine.body.rewardStars).toBeUndefined();
 
     const firstList = await request(app.getHttpServer())
@@ -100,6 +116,67 @@ describe('Routines & Routine Templates (e2e)', () => {
       .query({ childId: firstChild.child.id })
       .expect(200);
     expect(stars.body.currentStars).toBe(0);
+  });
+
+  it('criança vê apenas rotinas agendadas para hoje', async () => {
+    const { token } = await registerParent(app);
+    const { child, username, password } = await createChild(app, token);
+    const childAuth = await login(app, username, password);
+    const today = getTodayRecurrenceDay();
+    const otherDay = getDifferentRecurrenceDay();
+
+    const todayRoutine = await request(app.getHttpServer())
+      .post('/api/routines')
+      .set(authHeader(token))
+      .send({
+        childId: child.id,
+        name: 'Alongamento',
+        emoji: '🧘',
+        recurrenceDays: [today],
+      })
+      .expect(201);
+
+    const otherDayRoutine = await request(app.getHttpServer())
+      .post('/api/routines')
+      .set(authHeader(token))
+      .send({
+        childId: child.id,
+        name: 'Capoeira',
+        emoji: '🥋',
+        recurrenceDays: [otherDay],
+      })
+      .expect(201);
+
+    const childList = await request(app.getHttpServer())
+      .get('/api/routines')
+      .set(authHeader(childAuth.token))
+      .expect(200);
+    expect(childList.body.map((item) => item.id)).toContain(
+      todayRoutine.body.id,
+    );
+    expect(childList.body.map((item) => item.id)).not.toContain(
+      otherDayRoutine.body.id,
+    );
+
+    const parentList = await request(app.getHttpServer())
+      .get('/api/routines')
+      .set(authHeader(token))
+      .query({ childId: child.id })
+      .expect(200);
+    expect(parentList.body.map((item) => item.id)).toEqual(
+      expect.arrayContaining([todayRoutine.body.id, otherDayRoutine.body.id]),
+    );
+
+    const progress = await request(app.getHttpServer())
+      .get('/api/routines/progress/today')
+      .set(authHeader(childAuth.token))
+      .expect(200);
+    expect(progress.body.total).toBe(1);
+
+    await request(app.getHttpServer())
+      .patch(`/api/routines/${otherDayRoutine.body.id}/complete`)
+      .set(authHeader(childAuth.token))
+      .expect(400);
   });
 
   it('criança completa e desmarca a rotina do dia', async () => {

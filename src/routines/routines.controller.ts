@@ -26,11 +26,18 @@ export class RoutinesController {
   ) {}
 
   @Get()
-  async findAll(@CurrentUser() user: User, @Query('childId') childId?: string) {
+  async findAll(
+    @CurrentUser() user: User,
+    @Query('childId') childId?: string,
+    @Query('todayOnly') todayOnly?: string,
+  ) {
     const child = await this.accessControl.resolveChild(user, childId);
     return this.routinesService.findAll(
       child.id,
       this.accessControl.familyIdOfChild(child),
+      {
+        todayOnly: user.role === UserRole.CHILD || todayOnly === 'true',
+      },
     );
   }
 
