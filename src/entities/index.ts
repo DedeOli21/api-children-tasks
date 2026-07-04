@@ -40,3 +40,8 @@ export * from './task-template.entity';
 export { TaskType, RecurrenceDay } from './task-template.entity';
 export * from './active-task.entity';
 export { ActiveTaskStatus } from './active-task.entity';
+export * from './proactive-request.entity';
+export {
+  ProactiveCategoryIcon,
+  ProactiveRequestStatus,
+} from './proactive-request.entity';

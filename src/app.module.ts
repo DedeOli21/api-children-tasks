@@ -30,6 +30,7 @@ import { ReportsModule } from './reports/reports.module';
 import { TaskSchedulerModule } from './task-scheduler/task-scheduler.module';
 import { TaskTemplatesModule } from './task-templates/task-templates.module';
 import { ActiveTasksModule } from './active-tasks/active-tasks.module';
+import { ProactiveRequestsModule } from './proactive-requests/proactive-requests.module';
 import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -63,6 +64,7 @@ import {
   Notification,
   TaskTemplate,
   ActiveTask,
+  ProactiveRequest,
 } from './entities';
 
 const entities = [
@@ -95,6 +97,7 @@ const entities = [
   Notification,
   TaskTemplate,
   ActiveTask,
+  ProactiveRequest,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma
@@ -154,6 +157,7 @@ const shouldSynchronize =
     TaskSchedulerModule,
     TaskTemplatesModule,
     ActiveTasksModule,
+    ProactiveRequestsModule,
   ],
   controllers: [AppController],
   providers: [
