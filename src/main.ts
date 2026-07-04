@@ -19,7 +19,9 @@ async function bootstrap() {
     );
   }
   const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
+    ? process.env.ALLOWED_ORIGINS.split(',').map((origin) =>
+        origin.trim().replace(/\/+$/, ''),
+      )
     : true; // Em desenvolvimento, permite todas as origens
 
   app.enableCors({
