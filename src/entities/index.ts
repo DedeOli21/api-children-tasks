@@ -36,4 +36,7 @@ export * from './inventory-item.entity';
 export * from './family-settings.entity';
 export * from './notification.entity';
 export { NotificationType } from './notification.entity';
-
+export * from './task-template.entity';
+export { TaskType, RecurrenceDay } from './task-template.entity';
+export * from './active-task.entity';
+export { ActiveTaskStatus } from './active-task.entity';

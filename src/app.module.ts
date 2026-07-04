@@ -27,6 +27,9 @@ import { PetModule } from './pet/pet.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SettingsModule } from './settings/settings.module';
 import { ReportsModule } from './reports/reports.module';
+import { TaskSchedulerModule } from './task-scheduler/task-scheduler.module';
+import { TaskTemplatesModule } from './task-templates/task-templates.module';
+import { ActiveTasksModule } from './active-tasks/active-tasks.module';
 import { LegacyMigrationService } from './database/legacy-migration.service';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -58,6 +61,8 @@ import {
   InventoryItem,
   FamilySettings,
   Notification,
+  TaskTemplate,
+  ActiveTask,
 } from './entities';
 
 const entities = [
@@ -88,6 +93,8 @@ const entities = [
   InventoryItem,
   FamilySettings,
   Notification,
+  TaskTemplate,
+  ActiveTask,
 ];
 
 // Em produção o schema não sincroniza sozinho; DB_SYNC=true permite uma
@@ -104,7 +111,10 @@ const shouldSynchronize =
             url: process.env.DATABASE_URL,
             entities,
             synchronize: shouldSynchronize,
-            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            ssl:
+              process.env.NODE_ENV === 'production'
+                ? { rejectUnauthorized: false }
+                : false,
           }
         : {
             type: 'better-sqlite3',
@@ -141,6 +151,9 @@ const shouldSynchronize =
     NotificationsModule,
     SettingsModule,
     ReportsModule,
+    TaskSchedulerModule,
+    TaskTemplatesModule,
+    ActiveTasksModule,
   ],
   controllers: [AppController],
   providers: [
