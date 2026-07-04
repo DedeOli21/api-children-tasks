@@ -18,7 +18,9 @@ export class CreateProactiveRequestDto {
 
   @IsString()
   @IsNotEmpty({ message: 'Descrição é obrigatória' })
-  @MinLength(5, { message: 'Descreva a iniciativa com pelo menos 5 caracteres' })
+  @MinLength(5, {
+    message: 'Descreva a iniciativa com pelo menos 5 caracteres',
+  })
   @MaxLength(500, { message: 'Descrição deve ter no máximo 500 caracteres' })
   description: string;
 

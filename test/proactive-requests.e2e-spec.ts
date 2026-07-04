@@ -68,7 +68,6 @@ describe('ProactiveRequests (e2e)', () => {
     const approved = await request(app.getHttpServer())
       .patch(`/api/proactive-requests/${created.id}/approve`)
       .set(authHeader(parent.token))
-      .send({})
       .expect(200);
 
     expect(approved.body.status).toBe('approved');
@@ -79,7 +78,6 @@ describe('ProactiveRequests (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/proactive-requests/${created.id}/approve`)
       .set(authHeader(parent.token))
-      .send({})
       .expect(400);
 
     const stars = await request(app.getHttpServer())

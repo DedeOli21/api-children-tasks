@@ -40,7 +40,9 @@ export class ProactiveRequestsService {
 
   async create(child: User, dto: CreateProactiveRequestDto) {
     if (child.role !== UserRole.CHILD) {
-      throw new ForbiddenException('Somente crianças podem enviar Super Iniciativas');
+      throw new ForbiddenException(
+        'Somente crianças podem enviar Super Iniciativas',
+      );
     }
 
     const familyId = this.accessControl.familyIdOfChild(child);
@@ -107,10 +109,18 @@ export class ProactiveRequestsService {
     return requests.map((request) => this.toPublicRequest(request));
   }
 
-  async approve(parent: User, requestId: string, dto: ReviewProactiveRequestDto) {
+  async approve(
+    parent: User,
+    requestId: string,
+    dto: ReviewProactiveRequestDto = {},
+  ) {
     return this.dataSource.transaction(async (manager) => {
-      const request = await this.findRequestForReview(manager, parent, requestId);
-      const finalStars = dto.finalStars ?? request.suggestedStars;
+      const request = await this.findRequestForReview(
+        manager,
+        parent,
+        requestId,
+      );
+      const finalStars = dto?.finalStars ?? request.suggestedStars;
       const status =
         finalStars === request.suggestedStars
           ? ProactiveRequestStatus.APPROVED
@@ -119,8 +129,14 @@ export class ProactiveRequestsService {
       const child = await manager.findOne(User, {
         where: { id: request.childId },
       });
-      if (!child || child.role !== UserRole.CHILD || child.parentId !== parent.id) {
-        throw new ForbiddenException('Essa iniciativa não pertence à sua família');
+      if (
+        !child ||
+        child.role !== UserRole.CHILD ||
+        child.parentId !== parent.id
+      ) {
+        throw new ForbiddenException(
+          'Essa iniciativa não pertence à sua família',
+        );
       }
 
       request.status = status;
@@ -157,7 +173,11 @@ export class ProactiveRequestsService {
 
   async reject(parent: User, requestId: string) {
     return this.dataSource.transaction(async (manager) => {
-      const request = await this.findRequestForReview(manager, parent, requestId);
+      const request = await this.findRequestForReview(
+        manager,
+        parent,
+        requestId,
+      );
       request.status = ProactiveRequestStatus.REJECTED;
       request.finalStars = 0;
       request.reviewedById = parent.id;
