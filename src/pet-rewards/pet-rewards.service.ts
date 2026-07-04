@@ -3,6 +3,8 @@ import { EntityManager, IsNull, LessThanOrEqual, MoreThan } from 'typeorm';
 import {
   FamilyFeatureFlag,
   FeatureFlag,
+  HistoryEntry,
+  HistoryType,
   PetAnimationState,
   PetDrop,
   PetDropRule,
@@ -24,6 +26,7 @@ const DEFAULT_DROP_CHANCE: Record<PetDropSourceType, number> = {
   [PetDropSourceType.THERAPIST_MISSION]: 2000,
   [PetDropSourceType.PROACTIVE_REQUEST]: 1500,
 };
+const STREAK_FREEZE_DROP_EFFECT = 'streak_freeze';
 
 type DropRuleCandidate = {
   rarity: PetItemRarity;
@@ -52,6 +55,12 @@ export interface PetRewardResult {
       assetUrl: string | null;
       previewEmoji: string;
       isPremium: boolean;
+    };
+    bonus?: {
+      type: 'streak_freeze';
+      amount: number;
+      newBalance: number;
+      label: string;
     };
   };
 }
@@ -178,6 +187,7 @@ export class PetRewardsService {
       acquiredAt: new Date(),
     });
     await manager.save(inventory);
+    const bonus = await this.applyDropBonus(manager, input.child.id, petItem);
 
     await manager.save(
       manager.create(PetDrop, {
@@ -207,7 +217,40 @@ export class PetRewardsService {
           previewEmoji: petItem.previewEmoji,
           isPremium: petItem.isPremium,
         },
+        ...(bonus ? { bonus } : {}),
       },
+    };
+  }
+
+  private async applyDropBonus(
+    manager: EntityManager,
+    childId: string,
+    petItem: PetItem,
+  ): Promise<PetRewardResult['drop']['bonus'] | null> {
+    if (petItem.metadata?.futureEffect !== STREAK_FREEZE_DROP_EFFECT) {
+      return null;
+    }
+
+    const child = await manager.findOne(User, { where: { id: childId } });
+    if (!child) return null;
+
+    child.streakFreezes = (child.streakFreezes ?? 0) + 1;
+    await manager.save(child);
+
+    await manager.save(
+      manager.create(HistoryEntry, {
+        userId: child.id,
+        type: HistoryType.STREAK_FREEZE_GAINED,
+        description: `${petItem.previewEmoji} Drop encontrado: +1 proteção de sequência`,
+        starsChange: 0,
+      }),
+    );
+
+    return {
+      type: STREAK_FREEZE_DROP_EFFECT,
+      amount: 1,
+      newBalance: child.streakFreezes,
+      label: 'Proteção de sequência',
     };
   }
 

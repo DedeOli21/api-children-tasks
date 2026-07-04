@@ -61,6 +61,7 @@ export class ReportsService {
       penalty: 'Penalidade (responsável)',
       daily_penalty: 'Penalidade automática',
       reward_redeem: 'Resgate/Compra',
+      streak_freeze_gained: 'Proteção de streak recebida',
       streak_freeze_used: 'Proteção de streak',
       stars_add: 'Estrelas recebidas',
       stars_subtract: 'Estrelas removidas',

@@ -12,6 +12,7 @@ export enum HistoryType {
   TASK_COMPLETE = 'task_complete',
   PENALTY = 'penalty',
   REWARD_REDEEM = 'reward_redeem',
+  STREAK_FREEZE_GAINED = 'streak_freeze_gained',
   STREAK_FREEZE_USED = 'streak_freeze_used',
   STARS_ADD = 'stars_add',
   STARS_SUBTRACT = 'stars_subtract',
