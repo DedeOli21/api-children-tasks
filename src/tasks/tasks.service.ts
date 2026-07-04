@@ -76,7 +76,9 @@ export class TasksService {
   }
 
   async update(id: string, updateTaskDto: UpdateTaskDto, familyId: string) {
-    const task = await this.taskRepository.findOne({ where: { id, familyId } });
+    const task = await this.taskRepository.findOne({
+      where: { id, familyId, active: true },
+    });
 
     if (!task) {
       throw new NotFoundException('Tarefa não encontrada');
@@ -87,13 +89,16 @@ export class TasksService {
   }
 
   async delete(id: string, familyId: string) {
-    const task = await this.taskRepository.findOne({ where: { id, familyId } });
+    const task = await this.taskRepository.findOne({
+      where: { id, familyId, active: true },
+    });
 
     if (!task) {
       throw new NotFoundException('Tarefa não encontrada');
     }
 
-    await this.taskRepository.remove(task);
+    task.active = false;
+    await this.taskRepository.save(task);
     return { message: 'Tarefa removida com sucesso' };
   }
 
@@ -105,7 +110,7 @@ export class TasksService {
     }
 
     const task = await this.taskRepository.findOne({
-      where: { id: taskId, familyId: user.parentId ?? '' },
+      where: { id: taskId, familyId: user.parentId ?? '', active: true },
     });
 
     if (!task) {
@@ -161,6 +166,7 @@ export class TasksService {
       where: {
         status: TaskExecutionStatus.COMPLETED,
         user: { parentId, ...(childId ? { id: childId } : {}) },
+        task: { active: true },
       },
       relations: ['task', 'user'],
       order: { date: 'DESC', completedAt: 'ASC' },
@@ -259,7 +265,7 @@ export class TasksService {
     }
 
     const task = await this.taskRepository.findOne({
-      where: { id: taskId, familyId: user.parentId ?? '' },
+      where: { id: taskId, familyId: user.parentId ?? '', active: true },
     });
 
     if (!task) {
@@ -320,4 +326,3 @@ export class TasksService {
     };
   }
 }
-

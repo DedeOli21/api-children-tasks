@@ -164,6 +164,44 @@ describe('Tasks (e2e)', () => {
       .query({ childId: child.id })
       .expect(200);
     expect(res.body).toHaveLength(0);
+
+    const pending = await request(app.getHttpServer())
+      .get('/api/tasks/pending-approval')
+      .set(authHeader(parent.token))
+      .expect(200);
+    expect(pending.body).toHaveLength(0);
+  });
+
+  it('responsável remove uma tarefa já usada em rotina e log do dia', async () => {
+    const { parent, child, childAuth, task } = await setupFamilyWithTask();
+
+    await request(app.getHttpServer())
+      .post('/api/routines')
+      .set(authHeader(parent.token))
+      .send({
+        childId: child.id,
+        name: 'Rotina escolar',
+        emoji: '🎒',
+        taskIds: [task.id],
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/tasks/${task.id}/complete`)
+      .set(authHeader(childAuth.token))
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .delete(`/api/tasks/${task.id}`)
+      .set(authHeader(parent.token))
+      .expect(200);
+
+    const res = await request(app.getHttpServer())
+      .get('/api/tasks')
+      .set(authHeader(parent.token))
+      .query({ childId: child.id })
+      .expect(200);
+    expect(res.body).toHaveLength(0);
   });
 
   it('criança não pode criar tarefas (apenas responsável)', async () => {
