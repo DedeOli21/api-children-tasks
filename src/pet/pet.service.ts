@@ -7,9 +7,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import {
   VirtualPet,
+  PetEquippedItems,
   ShopItem,
   ShopItemType,
   InventoryItem,
+  PetInventoryItem,
   User,
   HistoryEntry,
   HistoryType,
@@ -35,6 +37,8 @@ export class PetService {
     private shopItemRepository: Repository<ShopItem>,
     @InjectRepository(InventoryItem)
     private inventoryRepository: Repository<InventoryItem>,
+    @InjectRepository(PetInventoryItem)
+    private petInventoryRepository: Repository<PetInventoryItem>,
     private dataSource: DataSource,
     private notificationsService: NotificationsService,
   ) {}
@@ -78,7 +82,14 @@ export class PetService {
     const equipped = await this.inventoryRepository.find({
       where: { childId: pet.childId, equipped: true },
     });
-    const byType = new Map(equipped.map((item) => [item.shopItem?.type, item.shopItem]));
+    const byType = new Map(
+      equipped.map((item) => [item.shopItem?.type, item.shopItem]),
+    );
+    const equippedPetItems = await this.petInventoryRepository.find({
+      where: { childId: pet.childId, equipped: true },
+      order: { updatedAt: 'DESC' },
+    });
+    const equippedAttachments = this.petAttachmentSnapshot(equippedPetItems);
 
     return {
       id: pet.id,
@@ -95,7 +106,13 @@ export class PetService {
       xpToNextLevel: pet.xpToNextLevel,
       stage: this.stageOf(pet.xp),
       mood: this.moodOf(pet),
-      equippedItems: pet.equippedItems ?? {},
+      equippedItems:
+        pet.equippedItems && Object.keys(pet.equippedItems).length > 0
+          ? pet.equippedItems
+          : equippedAttachments,
+      equippedAttachments: equippedPetItems.map((entry) =>
+        this.petInventorySummary(entry),
+      ),
       // Doente: penalidade da meia-noite; cura ao fechar um dia completo
       sick: !!pet.sickSince,
       sickSince: pet.sickSince,
@@ -113,6 +130,36 @@ export class PetService {
   private itemSummary(item?: ShopItem | null) {
     if (!item) return null;
     return { id: item.id, name: item.name, emoji: item.emoji };
+  }
+
+  private petInventorySummary(entry: PetInventoryItem) {
+    const item = entry.petItem;
+    return {
+      inventoryItemId: entry.id,
+      petItemId: entry.petItemId,
+      name: item.name,
+      emoji: item.previewEmoji,
+      type: item.type,
+      rarity: item.rarity,
+      isPremium: item.isPremium,
+      attachmentSlot: item.attachmentSlot,
+      attachmentKey: item.attachmentKey,
+      assetUrl: item.assetUrl,
+      quantity: entry.quantity,
+      equipped: entry.equipped,
+      equippedSlot: entry.equippedSlot,
+      acquisitionSource: entry.acquisitionSource,
+      acquiredAt: entry.acquiredAt,
+    };
+  }
+
+  private petAttachmentSnapshot(entries: PetInventoryItem[]): PetEquippedItems {
+    const equippedItems: PetEquippedItems = {};
+    for (const entry of entries) {
+      if (!entry.equipped || !entry.petItem) continue;
+      equippedItems[entry.petItem.attachmentSlot] = entry.petItem.attachmentKey;
+    }
+    return equippedItems;
   }
 
   private daysSince(date: string): number {
@@ -243,13 +290,20 @@ export class PetService {
   }
 
   async inventory(childId: string) {
-    const items = await this.inventoryRepository.find({
-      where: { childId },
-      order: { createdAt: 'ASC' },
-    });
-    return items
+    const [items, petItems] = await Promise.all([
+      this.inventoryRepository.find({
+        where: { childId },
+        order: { createdAt: 'ASC' },
+      }),
+      this.petInventoryRepository.find({
+        where: { childId },
+        order: { acquiredAt: 'DESC', createdAt: 'DESC' },
+      }),
+    ]);
+    const shopItems = items
       .filter((entry) => entry.shopItem)
       .map((entry) => ({
+        kind: 'shop_item',
         shopItemId: entry.shopItemId,
         name: entry.shopItem.name,
         emoji: entry.shopItem.emoji,
@@ -258,6 +312,12 @@ export class PetService {
         quantity: entry.quantity,
         equipped: entry.equipped,
       }));
+    const modernItems = petItems.map((entry) => ({
+      kind: 'pet_item',
+      ...this.petInventorySummary(entry),
+    }));
+
+    return [...shopItems, ...modernItems];
   }
 
   // ============ CUIDADO (regar/alimentar) ============
@@ -329,6 +389,9 @@ export class PetService {
   // ============ COSMÉTICOS ============
 
   async equip(child: User, shopItemId: string) {
+    const petItemResult = await this.equipPetInventoryItem(child, shopItemId);
+    if (petItemResult) return petItemResult;
+
     return this.dataSource.transaction(async (manager) => {
       const inventory = await manager.findOne(InventoryItem, {
         where: { childId: child.id, shopItemId },
@@ -361,6 +424,62 @@ export class PetService {
         message: inventory.equipped
           ? `${inventory.shopItem.emoji} ${inventory.shopItem.name} equipado!`
           : `${inventory.shopItem.emoji} ${inventory.shopItem.name} guardado`,
+      };
+    });
+  }
+
+  private async equipPetInventoryItem(child: User, itemId: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const inventory = await manager.findOne(PetInventoryItem, {
+        where: [
+          { childId: child.id, id: itemId },
+          { childId: child.id, petItemId: itemId },
+        ],
+      });
+      if (!inventory || !inventory.petItem) return null;
+
+      const slot = inventory.petItem.attachmentSlot;
+      const shouldEquip = !inventory.equipped;
+      const equippedInSlot = await manager.find(PetInventoryItem, {
+        where: {
+          childId: child.id,
+          equipped: true,
+          equippedSlot: slot,
+        },
+      });
+
+      for (const other of equippedInSlot) {
+        if (other.id === inventory.id) continue;
+        other.equipped = false;
+        other.equippedSlot = null;
+        await manager.save(other);
+      }
+
+      inventory.equipped = shouldEquip;
+      inventory.equippedSlot = shouldEquip ? slot : null;
+      await manager.save(inventory);
+
+      let pet = await manager.findOne(VirtualPet, {
+        where: { childId: child.id },
+      });
+      if (!pet) {
+        pet = manager.create(VirtualPet, {
+          childId: child.id,
+          lastDecayAt: new Date(),
+        });
+      }
+
+      const equippedItems: PetEquippedItems = { ...(pet.equippedItems ?? {}) };
+      equippedItems[slot] = shouldEquip ? inventory.petItem.attachmentKey : null;
+      pet.equippedItems = equippedItems;
+      await manager.save(pet);
+
+      return {
+        ...this.petInventorySummary(inventory),
+        equippedItems,
+        message: shouldEquip
+          ? `${inventory.petItem.previewEmoji} ${inventory.petItem.name} equipado!`
+          : `${inventory.petItem.previewEmoji} ${inventory.petItem.name} guardado`,
       };
     });
   }

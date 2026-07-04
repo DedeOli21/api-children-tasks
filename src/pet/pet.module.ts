@@ -8,13 +8,21 @@ import {
   VirtualPet,
   ShopItem,
   InventoryItem,
+  PetInventoryItem,
   User,
   HistoryEntry,
 } from '../entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([VirtualPet, ShopItem, InventoryItem, User, HistoryEntry]),
+    TypeOrmModule.forFeature([
+      VirtualPet,
+      ShopItem,
+      InventoryItem,
+      PetInventoryItem,
+      User,
+      HistoryEntry,
+    ]),
     AuthModule,
     NotificationsModule,
   ],

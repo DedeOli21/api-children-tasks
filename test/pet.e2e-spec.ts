@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { createTestApp } from './utils/test-app';
 import {
   registerParent,
@@ -10,9 +11,18 @@ import {
   AuthedUser,
   ChildFixture,
 } from './utils/fixtures';
+import {
+  PetAttachmentSlot,
+  PetInventoryItem,
+  PetItem,
+  PetItemAcquisitionSource,
+  PetItemRarity,
+  PetItemType,
+} from '../src/entities';
 
 describe('Pet Virtual (e2e)', () => {
   let app: INestApplication;
+  let dataSource: DataSource;
   let parent: AuthedUser;
   let child: AuthedUser;
   let childFixture: ChildFixture;
@@ -22,6 +32,7 @@ describe('Pet Virtual (e2e)', () => {
 
   beforeAll(async () => {
     app = await createTestApp();
+    dataSource = app.get(DataSource);
 
     parent = await registerParent(app);
     childFixture = await createChild(app, parent.token);
@@ -190,6 +201,74 @@ describe('Pet Virtual (e2e)', () => {
       .patch(`/api/pet/inventory/${waterItemId}/equip`)
       .set(authHeader(child.token))
       .expect(400);
+  });
+
+  it('exibe e equipa drops modernos como attachments do Pet', async () => {
+    const petItem = await dataSource.getRepository(PetItem).save(
+      dataSource.getRepository(PetItem).create({
+        key: 'drop-hat-test',
+        name: 'Boné de Vitória',
+        type: PetItemType.HAT,
+        attachmentSlot: PetAttachmentSlot.HEAD,
+        attachmentKey: 'hat_victory',
+        previewEmoji: '🧢',
+        rarity: PetItemRarity.RARE,
+        active: true,
+      }),
+    );
+    const inventoryItem = await dataSource.getRepository(PetInventoryItem).save(
+      dataSource.getRepository(PetInventoryItem).create({
+        childId,
+        petItemId: petItem.id,
+        quantity: 1,
+        acquisitionSource: PetItemAcquisitionSource.DROP,
+        acquiredAt: new Date(),
+      }),
+    );
+
+    const inventory = await request(app.getHttpServer())
+      .get('/api/pet/inventory')
+      .set(authHeader(child.token))
+      .expect(200);
+    expect(inventory.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'pet_item',
+          inventoryItemId: inventoryItem.id,
+          petItemId: petItem.id,
+          attachmentSlot: 'head',
+          attachmentKey: 'hat_victory',
+          equipped: false,
+        }),
+      ]),
+    );
+
+    const equipped = await request(app.getHttpServer())
+      .patch(`/api/pet/inventory/${petItem.id}/equip`)
+      .set(authHeader(child.token))
+      .expect(200);
+    expect(equipped.body).toMatchObject({
+      inventoryItemId: inventoryItem.id,
+      petItemId: petItem.id,
+      equipped: true,
+      equippedSlot: 'head',
+      equippedItems: { head: 'hat_victory' },
+    });
+
+    const pet = await request(app.getHttpServer())
+      .get('/api/pet')
+      .set(authHeader(child.token))
+      .expect(200);
+    expect(pet.body.equippedItems).toMatchObject({ head: 'hat_victory' });
+    expect(pet.body.equippedAttachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          petItemId: petItem.id,
+          attachmentKey: 'hat_victory',
+          equipped: true,
+        }),
+      ]),
+    );
   });
 
   it('RBAC: responsável observa o pet; professor não acessa; criança não gerencia a loja', async () => {
