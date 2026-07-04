@@ -45,6 +45,11 @@ describe('Pet Virtual (e2e)', () => {
       waterLevel: 80,
       nutritionLevel: 80,
       xp: 0,
+      level: 1,
+      xpToNextLevel: 100,
+      modelKey: 'plant_v1',
+      animationState: 'idle',
+      equippedItems: {},
       stage: 'seed',
       mood: 'happy',
     });
@@ -64,7 +69,13 @@ describe('Pet Virtual (e2e)', () => {
     const water = await request(app.getHttpServer())
       .post('/api/pet/shop-items')
       .set(authHeader(parent.token))
-      .send({ type: 'water', name: 'Gota Mágica', emoji: '💧', price: 2, restoreAmount: 30 })
+      .send({
+        type: 'water',
+        name: 'Gota Mágica',
+        emoji: '💧',
+        price: 2,
+        restoreAmount: 30,
+      })
       .expect(201);
     waterItemId = water.body.id;
 

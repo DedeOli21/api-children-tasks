@@ -22,6 +22,11 @@ export enum ProactiveRequestStatus {
   REJECTED = 'rejected',
 }
 
+export enum ProactiveRequestInputMode {
+  TEXT = 'text',
+  AUDIO = 'audio',
+}
+
 /**
  * Boa ação criada pela própria criança.
  * Nada credita estrelas até o responsável aprovar ou ajustar a solicitação.
@@ -52,6 +57,19 @@ export class ProactiveRequest {
 
   @Column({ type: 'text' })
   description: string;
+
+  @Column({
+    name: 'input_mode',
+    type: 'text',
+    default: ProactiveRequestInputMode.TEXT,
+  })
+  inputMode: ProactiveRequestInputMode;
+
+  @Column({ name: 'audio_url', type: 'text', nullable: true })
+  audioUrl: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  transcript: string | null;
 
   @Column({ name: 'suggested_stars', type: 'int' })
   suggestedStars: number;

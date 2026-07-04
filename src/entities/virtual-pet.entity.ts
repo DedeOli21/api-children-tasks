@@ -9,16 +9,32 @@ import {
 } from 'typeorm';
 import { User } from './user.entity';
 
+export enum PetAnimationState {
+  IDLE = 'idle',
+  HAPPY = 'happy',
+  SAD = 'sad',
+  SICK = 'sick',
+  SLEEPING = 'sleeping',
+}
+
+export type PetEquippedItems = {
+  body?: string | null;
+  head?: string | null;
+  eyes?: string | null;
+  background?: string | null;
+  effect?: string | null;
+  species?: string | null;
+};
+
 /**
- * A Planta Virtual da criança (mascote botânico, estilo Pou/Tamagotchi).
+ * Mascote virtual da criança.
  *
- * Guarda apenas o estado do "ser vivo": níveis de sobrevivência e XP.
- * O que está equipado (espécie/cenário/efeito) mora no InventoryItem
- * com a flag equipped — uma única fonte de verdade para posses.
+ * Fase 1 mantém compatibilidade com a planta atual, mas adiciona o contrato
+ * game-like para Rive/Pixi: state machine e attachments equipados por slot.
  *
- * Os níveis decaem com o tempo (decaimento preguiçoso calculado a partir
- * de lastDecayAt na Fase 2); regar/alimentar consome itens do inventário,
- * restaura os níveis e rende XP. O estágio de crescimento é derivado do XP.
+ * equippedItems é um snapshot denormalizado para leitura rápida do frontend:
+ * { head: "hat_red", eyes: "glasses_round", background: "garden_day" }.
+ * A posse canônica dos itens mora em PetInventoryItem.
  */
 @Entity('virtual_pets')
 export class VirtualPet {
@@ -37,6 +53,23 @@ export class VirtualPet {
   @Column({ default: 'Plantinha' })
   name: string;
 
+  // Modelo/artboard que o frontend deve carregar (ex.: lulu_pomeranian_v1)
+  @Column({ name: 'model_key', default: 'plant_v1' })
+  modelKey: string;
+
+  @Column({ name: 'rive_artboard', type: 'text', nullable: true })
+  riveArtboard: string | null;
+
+  @Column({ name: 'rive_state_machine', type: 'text', nullable: true })
+  riveStateMachine: string | null;
+
+  @Column({
+    name: 'animation_state',
+    type: 'text',
+    default: PetAnimationState.IDLE,
+  })
+  animationState: PetAnimationState;
+
   // Níveis de sobrevivência (0–100)
   @Column({ name: 'water_level', type: 'int', default: 80 })
   waterLevel: number;
@@ -48,6 +81,20 @@ export class VirtualPet {
   // planta → florida) é derivado do XP no serviço
   @Column({ type: 'int', default: 0 })
   xp: number;
+
+  // Progressão nova: 1–100, derivada de XP/streak no serviço de gamificação
+  @Column({ type: 'int', default: 1 })
+  level: number;
+
+  @Column({ name: 'xp_to_next_level', type: 'int', default: 100 })
+  xpToNextLevel: number;
+
+  @Column({
+    name: 'equipped_items',
+    type: process.env.DATABASE_TYPE === 'postgres' ? 'jsonb' : 'simple-json',
+    nullable: true,
+  })
+  equippedItems: PetEquippedItems | null;
 
   // Âncora do decaimento preguiçoso dos níveis
   @Column({

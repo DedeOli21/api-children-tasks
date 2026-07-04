@@ -32,7 +32,20 @@ export * from './reward-event.entity';
 export * from './shop-item.entity';
 export { ShopItemType } from './shop-item.entity';
 export * from './virtual-pet.entity';
+export { PetAnimationState } from './virtual-pet.entity';
 export * from './inventory-item.entity';
+export * from './pet-item.entity';
+export {
+  PetAttachmentSlot,
+  PetItemRarity,
+  PetItemType,
+} from './pet-item.entity';
+export * from './pet-inventory-item.entity';
+export { PetItemAcquisitionSource } from './pet-inventory-item.entity';
+export * from './pet-drop.entity';
+export { PetDropSourceType } from './pet-drop.entity';
+export * from './feature-flag.entity';
+export { FeatureFlagScope } from './feature-flag.entity';
 export * from './family-settings.entity';
 export * from './notification.entity';
 export { NotificationType } from './notification.entity';
@@ -43,5 +56,6 @@ export { ActiveTaskStatus } from './active-task.entity';
 export * from './proactive-request.entity';
 export {
   ProactiveCategoryIcon,
+  ProactiveRequestInputMode,
   ProactiveRequestStatus,
 } from './proactive-request.entity';
