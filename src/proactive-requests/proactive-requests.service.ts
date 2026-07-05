@@ -132,18 +132,7 @@ export class ProactiveRequestsService {
           ? ProactiveRequestStatus.APPROVED
           : ProactiveRequestStatus.ADJUSTED;
 
-      const child = await manager.findOne(User, {
-        where: { id: request.childId },
-      });
-      if (
-        !child ||
-        child.role !== UserRole.CHILD ||
-        child.parentId !== parent.id
-      ) {
-        throw new ForbiddenException(
-          'Essa iniciativa não pertence à sua família',
-        );
-      }
+      const child = await this.findChildForReview(manager, parent, request);
 
       request.status = status;
       request.finalStars = finalStars;
@@ -193,6 +182,8 @@ export class ProactiveRequestsService {
         parent,
         requestId,
       );
+      const child = await this.findChildForReview(manager, parent, request);
+
       request.status = ProactiveRequestStatus.REJECTED;
       request.finalStars = 0;
       request.reviewedById = parent.id;
@@ -200,7 +191,7 @@ export class ProactiveRequestsService {
       await manager.save(request);
 
       return {
-        ...this.toPublicRequest({ ...request, reviewedBy: parent }),
+        ...this.toPublicRequest({ ...request, child, reviewedBy: parent }),
         starsEarned: 0,
         message: 'Super Iniciativa recusada. Nenhuma estrela foi creditada.',
       };
@@ -214,7 +205,6 @@ export class ProactiveRequestsService {
   ): Promise<ProactiveRequest> {
     const options: FindOneOptions<ProactiveRequest> = {
       where: { id: requestId, familyId: parent.id },
-      relations: ['child', 'reviewedBy'],
     };
 
     if (this.dataSource.options.type === 'postgres') {
@@ -229,6 +219,26 @@ export class ProactiveRequestsService {
       throw new BadRequestException('Esta Super Iniciativa já foi revisada');
     }
     return request;
+  }
+
+  private async findChildForReview(
+    manager: EntityManager,
+    parent: User,
+    request: ProactiveRequest,
+  ): Promise<User> {
+    const child = await manager.findOne(User, {
+      where: { id: request.childId },
+    });
+    if (
+      !child ||
+      child.role !== UserRole.CHILD ||
+      child.parentId !== parent.id
+    ) {
+      throw new ForbiddenException(
+        'Essa iniciativa não pertence à sua família',
+      );
+    }
+    return child;
   }
 
   private toPublicRequest(request: Partial<ProactiveRequest>) {
